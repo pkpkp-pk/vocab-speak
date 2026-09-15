@@ -1,10 +1,17 @@
 import { useEffect, useState } from "react";
 
-export function useLocalStorage(key, initialValue) {
+// `validate` (optional) guards against hand-edited or corrupt stored values —
+// a value with the wrong shape falls back to initialValue instead of
+// propagating into the app and crashing it (e.g. a non-array customTopics
+// would break `[...TOPICS, ...customTopics]`).
+export function useLocalStorage(key, initialValue, validate) {
   const [value, setValue] = useState(() => {
     try {
       const stored = window.localStorage.getItem(key);
-      return stored !== null ? JSON.parse(stored) : initialValue;
+      if (stored === null) return initialValue;
+      const parsed = JSON.parse(stored);
+      if (validate && !validate(parsed)) return initialValue;
+      return parsed;
     } catch {
       return initialValue;
     }

@@ -1,0 +1,109 @@
+.session-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 2rem 1.25rem;
+}
+@media (min-width: 640px) {
+  .session-screen {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+
+.session-head {
+  width: 100%;
+  max-width: 36rem;
+  text-align: center;
+}
+
+.session-title {
+  margin-top: 0.5rem;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  line-height: 2rem;
+}
+@media (min-width: 640px) {
+  .session-title {
+    font-size: 1.875rem;
+    line-height: 2.25rem;
+  }
+}
+
+.session-prompt {
+  margin: 0.5rem auto 0;
+  max-width: 28rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--chalkdim);
+}
+
+.session-start {
+  padding: 0.75rem 2rem;
+  font-size: 1rem;
+}
+
+.session-running {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.transcript-live {
+  min-height: 2.5rem;
+  width: 100%;
+  max-width: 28rem;
+  text-align: center;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--chalkdim);
+}
+.transcript-final {
+  color: var(--chalk);
+}
+.transcript-interim {
+  color: rgba(201, 195, 180, 0.6);
+}
+.transcript-waiting {
+  font-style: italic;
+  color: rgba(201, 195, 180, 0.5);
+}
+
+.session-finish {
+  padding: 0.75rem 2rem;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--chalk);
+  border-color: rgba(255, 255, 255, 0.2);
+  transition: border-color 0.2s, color 0.2s, transform 0.15s;
+}
+.session-finish:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: var(--chalk);
+}
+.session-finish:active {
+  transform: scale(0.95);
+}
+
+.session-note {
+  max-width: 24rem;
+  text-align: center;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: rgba(201, 195, 180, 0.7);
+}
+
+.session-exit {
+  font-size: 0.75rem;
+  color: rgba(201, 195, 180, 0.6);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.session-exit:hover {
+  color: var(--chalkdim);
+}

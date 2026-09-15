@@ -1,0 +1,106 @@
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+}
+
+/* Stage swap (replaces framer-motion's <AnimatePresence mode="wait">):
+   old stage fades out via .is-leaving, then App swaps the content and the
+   new stage fades in via .is-entering. Duration must match STAGE_FADE_MS
+   in App.jsx. */
+.stage-fade {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  opacity: 1;
+  transition: opacity 0.25s ease-out;
+}
+.stage-fade.is-leaving {
+  opacity: 0;
+  pointer-events: none; /* don't allow clicks on the vanishing screen */
+}
+.stage-fade.is-entering {
+  animation: fade-in 0.25s ease-out both;
+}
+
+/* --- select stage --- */
+.select-stage {
+  margin: 0 auto;
+  display: flex;
+  width: 100%;
+  max-width: 42rem;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2rem;
+  padding: 1.5rem 1.25rem;
+}
+@media (min-width: 640px) {
+  .select-stage {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+
+.select-head {
+  text-align: center;
+}
+
+.select-title {
+  font-family: var(--font-display);
+  font-size: 1.875rem;
+  line-height: 1.25;
+}
+@media (min-width: 640px) {
+  .select-title {
+    font-size: 2.25rem;
+  }
+}
+
+.select-sub {
+  margin: 0.5rem auto 0;
+  max-width: 28rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--chalkdim);
+}
+@media (min-width: 640px) {
+  .select-sub {
+    font-size: 1rem;
+    line-height: 1.5rem;
+  }
+}
+
+.ai-error {
+  text-align: center;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--coral);
+}
+
+.custom-hint {
+  text-align: center;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: rgba(201, 195, 180, 0.5);
+}
+.custom-hint-btn {
+  text-decoration: underline dotted;
+}
+.custom-hint-btn:hover {
+  color: var(--chalkdim);
+}
+
+.app-footer {
+  padding: 1rem 1.25rem;
+  text-align: center;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: rgba(201, 195, 180, 0.5);
+}
+@media (min-width: 640px) {
+  .app-footer {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}

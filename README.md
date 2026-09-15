@@ -1,8 +1,10 @@
 # Speak Stage — Vocabulary & Spontaneous Speaking Trainer
 
-A React + Vite + Tailwind + Framer Motion app for practicing spontaneous
-English speaking. Pick a topic, talk for 2–4 minutes, tap a hint button if
-you stall, and get pace/filler-word stats when you're done.
+A React + Vite app for practicing spontaneous
+English speaking. Styled with plain per-component CSS (design tokens live as
+CSS custom properties in `src/index.css`); all animations are CSS
+transitions/keyframes — no UI libraries. Pick a topic, talk for 2–4 minutes,
+tap a hint button if you stall, and get pace/filler-word stats when you're done.
 
 ## Run it locally
 

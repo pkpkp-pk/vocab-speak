@@ -1,0 +1,256 @@
+.topic-card-wrap {
+  position: relative;
+}
+
+.topic-glow {
+  position: absolute;
+  inset: -1.5rem;
+  z-index: -10;
+  border-radius: 2rem;
+  background: linear-gradient(to bottom, rgba(242, 193, 78, 0.1), transparent);
+  filter: blur(40px);
+}
+@media (min-width: 640px) {
+  .topic-glow {
+    inset: -2.5rem;
+  }
+}
+
+/* reel pointer notch, slot-machine style */
+.reel-notch {
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  top: 0;
+  z-index: 10;
+  transform: translate(-50%, -50%);
+}
+.reel-notch-diamond {
+  height: 0.75rem;
+  width: 0.75rem;
+  transform: rotate(45deg);
+  background: var(--amber);
+  transition: background-color 0.2s;
+}
+.reel-notch-diamond.spinning {
+  background: var(--coral);
+}
+
+.topic-card {
+  overflow: hidden;
+  border-radius: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(21, 46, 41, 0.6);
+  box-shadow: var(--shadow-glow);
+  backdrop-filter: blur(4px);
+}
+/* one-shot ring pulse when the spin lands */
+.topic-card.landed {
+  animation: ring-pulse 0.7s ease-out;
+}
+
+/* --- spinning reel --- */
+.spin-reel {
+  display: flex;
+  min-height: 280px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 3.5rem 1.5rem;
+  text-align: center;
+  animation: fade-in 0.2s ease-out both;
+}
+@media (min-width: 640px) {
+  .spin-reel {
+    min-height: 320px;
+  }
+}
+
+.reel-window {
+  position: relative;
+  height: 6rem;
+  width: 100%;
+  max-width: 24rem;
+  overflow: hidden;
+}
+@media (min-width: 640px) {
+  .reel-window {
+    height: 7rem;
+  }
+}
+
+.reel-fade {
+  pointer-events: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  height: 2rem;
+}
+.reel-fade-top {
+  top: 0;
+  background: linear-gradient(to bottom, var(--stage-800), transparent);
+}
+.reel-fade-bottom {
+  bottom: 0;
+  background: linear-gradient(to top, var(--stage-800), transparent);
+}
+
+/* old and new titles stack absolutely during the 0.14s handoff */
+.reel-item {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.reel-enter {
+  animation: reel-in 0.14s ease-out both;
+}
+.reel-leave {
+  animation: reel-out 0.14s ease-out both;
+}
+
+.reel-cat {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  color: rgba(201, 195, 180, 0.7);
+}
+
+.reel-title {
+  margin-top: 0.25rem;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+@media (min-width: 640px) {
+  .reel-title {
+    font-size: 1.5rem;
+    line-height: 2rem;
+  }
+}
+
+.spin-dots {
+  display: flex;
+  gap: 0.375rem;
+}
+.spin-dot {
+  height: 0.375rem;
+  width: 0.375rem;
+  border-radius: 999px;
+  background: var(--coral);
+  animation: dot-pulse 0.9s ease-in-out infinite;
+}
+.spin-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.spin-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/* --- landed topic --- */
+.topic-detail {
+  display: flex;
+  min-height: 280px;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 2rem 1.5rem;
+  animation: topic-pop 0.4s var(--ease-spring-soft) both;
+}
+@media (min-width: 640px) {
+  .topic-detail {
+    min-height: 320px;
+    padding: 2.5rem;
+  }
+}
+
+.topic-tags {
+  margin-bottom: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+.chip-ai {
+  background: rgba(255, 93, 115, 0.15);
+  color: var(--coral);
+}
+.chip-custom {
+  background: rgba(242, 193, 78, 0.15);
+  color: var(--amber);
+}
+
+.topic-title {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  line-height: 1.25;
+}
+@media (min-width: 640px) {
+  .topic-title {
+    font-size: 2.25rem;
+  }
+}
+
+.topic-prompt {
+  margin-top: 0.75rem;
+  max-width: 28rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--chalkdim);
+}
+@media (min-width: 640px) {
+  .topic-prompt {
+    font-size: 1rem;
+    line-height: 1.5rem;
+  }
+}
+
+.topic-actions {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.75rem;
+}
+@media (min-width: 640px) {
+  .topic-actions {
+    flex-direction: row;
+    align-items: center;
+  }
+  .topic-start {
+    font-size: 1rem;
+    line-height: 1.5rem;
+  }
+}
+
+/* Every frame includes --shadow-glow because an animating box-shadow
+   replaces the whole property — omitting it would drop the base glow. */
+@keyframes ring-pulse {
+  0% { box-shadow: var(--shadow-glow), 0 0 0 0 rgba(242, 193, 78, 0); }
+  50% { box-shadow: var(--shadow-glow), 0 0 0 6px rgba(242, 193, 78, 0.35); }
+  100% { box-shadow: var(--shadow-glow), 0 0 0 0 rgba(242, 193, 78, 0); }
+}
+
+@keyframes reel-in {
+  from { transform: translateY(-46px); opacity: 0; filter: blur(3px); }
+  to { transform: translateY(0); opacity: 1; filter: blur(0); }
+}
+
+@keyframes reel-out {
+  from { transform: translateY(0); opacity: 1; filter: blur(0); }
+  to { transform: translateY(46px); opacity: 0; filter: blur(3px); }
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+@keyframes topic-pop {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}

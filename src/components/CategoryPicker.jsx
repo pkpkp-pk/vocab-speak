@@ -1,30 +1,52 @@
-import { motion } from "framer-motion";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CATEGORIES, DIFFICULTIES } from "../data/topics.js";
+import "./CategoryPicker.css";
 
 function PillGroup({ label, active, onChange, options, getId, getLabel }) {
+  const rowRef = useRef(null);
+  const [ind, setInd] = useState(null); // {x, y, w, h} of the active pill
+
+  // Measure the active button so the amber indicator can slide over to it
+  // (replaces framer-motion's layoutId shared-element animation).
+  const measure = useCallback(() => {
+    const btn = rowRef.current?.querySelector(`[data-id="${active}"]`);
+    if (btn) {
+      setInd({ x: btn.offsetLeft, y: btn.offsetTop, w: btn.offsetWidth, h: btn.offsetHeight });
+    }
+  }, [active]);
+
+  useEffect(() => {
+    measure();
+  }, [measure, options]);
+
+  useEffect(() => {
+    window.addEventListener("resize", measure);
+    // Re-measure once webfonts finish loading — text widths shift slightly.
+    document.fonts?.ready.then(measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [measure]);
+
   return (
-    <div>
-      <p className="mb-2.5 text-xs font-medium uppercase tracking-wide text-chalkdim/80">{label}</p>
-      <div className="flex flex-wrap gap-2">
+    <div className="pill-group">
+      <p className="label-xs pill-label">{label}</p>
+      <div className="pill-row" ref={rowRef}>
+        {ind && (
+          <span
+            className="pill-indicator"
+            style={{ transform: `translate(${ind.x}px, ${ind.y}px)`, width: ind.w, height: ind.h }}
+          />
+        )}
         {options.map((opt) => {
           const id = getId(opt);
           const isActive = active === id;
           return (
             <button
               key={id}
+              data-id={id}
               onClick={() => onChange(id)}
-              className={`relative rounded-full px-4 py-2 text-sm transition-colors ${
-                isActive ? "text-stage-950" : "text-chalkdim hover:text-chalk"
-              }`}
+              className={`pill ${isActive ? "active" : ""}`}
             >
-              {isActive && (
-                <motion.span
-                  layoutId={`pill-${label}`}
-                  className="absolute inset-0 rounded-full bg-amber"
-                  transition={{ type: "spring", stiffness: 500, damping: 32 }}
-                />
-              )}
-              <span className="relative z-10">{getLabel(opt)}</span>
+              {getLabel(opt)}
             </button>
           );
         })}
@@ -35,7 +57,7 @@ function PillGroup({ label, active, onChange, options, getId, getLabel }) {
 
 export default function CategoryPicker({ category, difficulty, onCategory, onDifficulty }) {
   return (
-    <div className="flex flex-col gap-5 sm:flex-row sm:gap-8">
+    <div className="category-picker">
       <PillGroup
         label="Category"
         active={category}

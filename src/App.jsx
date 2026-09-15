@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import Header from "./components/Header.jsx";
 import CategoryPicker from "./components/CategoryPicker.jsx";
 import TopicCard from "./components/TopicCard.jsx";
@@ -11,15 +10,32 @@ import { useLocalStorage } from "./hooks/useLocalStorage.js";
 import { getRandomTopic, TOPICS, DIFFICULTIES } from "./data/topics.js";
 import { generateAITopic } from "./lib/aiTopics.js";
 import { analyzeSpeech } from "./lib/analyzeSpeech.js";
+import "./App.css";
 
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+// Local-calendar date as YYYY-MM-DD. (The old version used toISOString(),
+// which is UTC — the "day" flipped at UTC midnight instead of local midnight,
+// and yesterday was computed as now-minus-86400000ms, which lands on the
+// wrong date across DST changes.)
+function dateKey(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function yesterdayKey() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1); // calendar-day subtraction, DST-safe
+  return dateKey(d);
 }
 
 // Slot-machine timing: fast constant spin while we have no result yet,
 // then a short decelerating run that lands exactly on the final topic.
 const FAST_TICK_MS = 70;
 const LAND_TICKS = 8;
+
+// Must match the .stage-fade transition duration in App.css.
+const STAGE_FADE_MS = 250;
 
 export default function App() {
   const [stage, setStage] = useState("select"); // select | session | results
@@ -28,13 +44,17 @@ export default function App() {
   const [topic, setTopic] = useState(() => getRandomTopic(TOPICS, {}));
   const [sessionResult, setSessionResult] = useState(null);
 
-  const [aiMode, setAiMode] = useLocalStorage("speakstage.aiMode", false);
-  const [apiKey, setApiKey] = useLocalStorage("speakstage.apiKey", "");
-  const [customTopics, setCustomTopics] = useLocalStorage("speakstage.customTopics", []);
+  const [aiMode, setAiMode] = useLocalStorage("speakstage.aiMode", false, (v) => typeof v === "boolean");
+  const [apiKey, setApiKey] = useLocalStorage("speakstage.apiKey", "", (v) => typeof v === "string");
+  const [customTopics, setCustomTopics] = useLocalStorage("speakstage.customTopics", [], Array.isArray);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [customModalOpen, setCustomModalOpen] = useState(false);
-  const [lastPracticeDate, setLastPracticeDate] = useLocalStorage("speakstage.lastDate", null);
-  const [streak, setStreak] = useLocalStorage("speakstage.streak", 0);
+  const [lastPracticeDate, setLastPracticeDate] = useLocalStorage(
+    "speakstage.lastDate",
+    null,
+    (v) => v === null || typeof v === "string"
+  );
+  const [streak, setStreak] = useLocalStorage("speakstage.streak", 0, (v) => typeof v === "number" && v >= 0);
 
   const [loadingAI, setLoadingAI] = useState(false);
   const [aiError, setAiError] = useState(null);
@@ -46,6 +66,21 @@ export default function App() {
   const spinRunIdRef = useRef(0);
 
   useEffect(() => () => clearTimeout(spinTimeoutRef.current), []);
+
+  // Delayed stage swap (replaces framer-motion's <AnimatePresence mode="wait">):
+  // fade the old stage out, swap content after the fade, new stage fades in.
+  const [renderedStage, setRenderedStage] = useState(stage);
+  const [leaving, setLeaving] = useState(false);
+
+  useEffect(() => {
+    if (stage === renderedStage) return;
+    setLeaving(true);
+    const t = setTimeout(() => {
+      setRenderedStage(stage);
+      setLeaving(false);
+    }, STAGE_FADE_MS);
+    return () => clearTimeout(t);
+  }, [stage, renderedStage]);
 
   const combinedPool = useMemo(() => [...TOPICS, ...customTopics], [customTopics]);
   const targetSeconds = (DIFFICULTIES.find((d) => d.id === topic?.difficulty)?.minutes ?? 3) * 60;
@@ -136,10 +171,9 @@ export default function App() {
     });
     setSessionResult({ result, stats });
 
-    const today = todayKey();
+    const today = dateKey();
     if (lastPracticeDate !== today) {
-      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-      setStreak(lastPracticeDate === yesterday ? streak + 1 : 1);
+      setStreak(lastPracticeDate === yesterdayKey() ? streak + 1 : 1);
       setLastPracticeDate(today);
     }
 
@@ -147,7 +181,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="app-shell">
       <Header
         aiMode={aiMode}
         onToggleAI={() => {
@@ -159,20 +193,12 @@ export default function App() {
         streak={streak}
       />
 
-      <AnimatePresence mode="wait">
-        {stage === "select" && (
-          <motion.main
-            key="select"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-8 px-5 py-6 sm:px-8"
-          >
-            <div className="text-center">
-              <h1 className="font-display text-3xl leading-tight sm:text-4xl">
-                Pick a topic. Speak your mind.
-              </h1>
-              <p className="mx-auto mt-2 max-w-md text-sm text-chalkdim sm:text-base">
+      <div className={`stage-fade ${leaving ? "is-leaving" : "is-entering"}`}>
+        {renderedStage === "select" && (
+          <main className="select-stage">
+            <div className="select-head">
+              <h1 className="select-title">Pick a topic. Speak your mind.</h1>
+              <p className="select-sub">
                 No scripts, no prep — just talk, and reach for a hint word if you stall.
               </p>
             </div>
@@ -185,7 +211,7 @@ export default function App() {
             />
 
             {aiError && (
-              <p className="text-center text-xs text-coral">{aiError} — landed on a local topic instead.</p>
+              <p className="ai-error">{aiError} — landed on a local topic instead.</p>
             )}
 
             <TopicCard
@@ -197,19 +223,18 @@ export default function App() {
               onStart={() => setStage("session")}
             />
 
-            <p className="text-center text-xs text-chalkdim/50">
+            <p className="custom-hint">
               Don't see enough variety?{" "}
-              <button onClick={() => setCustomModalOpen(true)} className="underline decoration-dotted hover:text-chalkdim">
+              <button onClick={() => setCustomModalOpen(true)} className="custom-hint-btn">
                 add your own topics
               </button>{" "}
               — they work offline too.
             </p>
-          </motion.main>
+          </main>
         )}
 
-        {stage === "session" && (
+        {renderedStage === "session" && (
           <SessionScreen
-            key="session"
             topic={topic}
             targetSeconds={targetSeconds}
             onFinish={finishSession}
@@ -217,9 +242,8 @@ export default function App() {
           />
         )}
 
-        {stage === "results" && sessionResult && (
+        {renderedStage === "results" && sessionResult && (
           <StatsPanel
-            key="results"
             topic={topic}
             result={sessionResult.result}
             stats={sessionResult.stats}
@@ -230,7 +254,7 @@ export default function App() {
             }}
           />
         )}
-      </AnimatePresence>
+      </div>
 
       <AISettingsModal
         open={settingsOpen}
@@ -251,7 +275,7 @@ export default function App() {
         onDelete={deleteCustomTopic}
       />
 
-      <footer className="px-5 py-4 text-center text-xs text-chalkdim/50 sm:px-8">
+      <footer className="app-footer">
         Built for daily fluency practice — your voice never leaves your browser unless AI mode is on.
       </footer>
     </div>

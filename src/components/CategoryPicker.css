@@ -1,0 +1,56 @@
+.category-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+@media (min-width: 640px) {
+  .category-picker {
+    flex-direction: row;
+    gap: 2rem;
+  }
+}
+
+.pill-label {
+  margin-bottom: 0.625rem;
+  font-weight: 500;
+}
+
+.pill-row {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Sliding amber highlight behind the active pill. Position/size come from
+   inline styles measured in CategoryPicker.jsx; the transition does the
+   sliding. x/y are both needed because the row wraps. */
+.pill-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 999px;
+  background: var(--amber);
+  transition:
+    transform 0.4s var(--ease-spring-soft),
+    width 0.4s var(--ease-spring-soft),
+    height 0.4s var(--ease-spring-soft);
+  pointer-events: none;
+}
+
+.pill {
+  position: relative;
+  z-index: 1;
+  border-radius: 999px;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--chalkdim);
+  transition: color 0.2s;
+}
+.pill:hover {
+  color: var(--chalk);
+}
+.pill.active {
+  color: var(--stage-950);
+}

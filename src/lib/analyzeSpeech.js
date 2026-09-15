@@ -1,7 +1,35 @@
+// Words that are essentially always fillers.
 const FILLER_WORDS = [
-  "um", "uh", "umm", "uhh", "like", "you know", "sort of", "kind of",
-  "actually", "basically", "literally", "i mean", "so yeah", "right",
+  "um", "uh", "umm", "uhh", "you know", "sort of", "kind of",
+  "actually", "basically", "literally", "i mean", "so yeah",
 ];
+
+// Common legitimate words too ("I like coding", "the right answer") — these
+// are reported separately instead of inflating the filler count.
+const AMBIGUOUS_FILLERS = ["like", "right"];
+
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Whole-word count of `term` in already-lowercased text.
+function countWord(clean, term) {
+  const matches = clean.match(new RegExp(`\\b${escapeRegExp(term)}\\b`, "g"));
+  return matches?.length ?? 0;
+}
+
+function countAll(clean, words) {
+  const counts = {};
+  let total = 0;
+  words.forEach((word) => {
+    const n = countWord(clean, word);
+    if (n) {
+      counts[word] = n;
+      total += n;
+    }
+  });
+  return { counts, total };
+}
 
 export function analyzeSpeech(transcript, { durationSeconds, keywords = [] }) {
   const clean = transcript.trim().toLowerCase();
@@ -10,19 +38,14 @@ export function analyzeSpeech(transcript, { durationSeconds, keywords = [] }) {
   const minutes = Math.max(durationSeconds / 60, 1 / 60);
   const wpm = Math.round(wordCount / minutes);
 
-  const fillerCounts = {};
-  let fillerTotal = 0;
-  FILLER_WORDS.forEach((filler) => {
-    const escaped = filler.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`\\b${escaped}\\b`, "g");
-    const matches = clean.match(re);
-    if (matches?.length) {
-      fillerCounts[filler] = matches.length;
-      fillerTotal += matches.length;
-    }
-  });
+  const { counts: fillerCounts, total: fillerTotal } = countAll(clean, FILLER_WORDS);
+  const { counts: possibleFillerCounts, total: possibleFillerTotal } = countAll(clean, AMBIGUOUS_FILLERS);
 
-  const keywordsUsed = keywords.filter((kw) => clean.includes(kw.toLowerCase()));
+  // Whole-word matching — a keyword like "risk" must not match "brisk",
+  // and "apps" must not match "perhaps".
+  const keywordsUsed = keywords.filter((kw) =>
+    new RegExp(`\\b${escapeRegExp(kw.toLowerCase())}\\b`).test(clean)
+  );
 
   let pace = "steady";
   if (wpm > 0) {
@@ -37,7 +60,9 @@ export function analyzeSpeech(transcript, { durationSeconds, keywords = [] }) {
     durationSeconds,
     fillerTotal,
     fillerCounts,
-    fillerRatio: wordCount ? +(fillerTotal / wordCount * 100).toFixed(1) : 0,
+    possibleFillerTotal,
+    possibleFillerCounts,
+    fillerRatio: wordCount ? +((fillerTotal / wordCount) * 100).toFixed(1) : 0,
     keywordsUsed,
     keywordsTotal: keywords.length,
     pace,

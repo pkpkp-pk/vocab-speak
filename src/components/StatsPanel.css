@@ -1,0 +1,160 @@
+.stats-panel {
+  margin: 0 auto;
+  display: flex;
+  width: 100%;
+  max-width: 42rem;
+  flex: 1;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 2rem 1.25rem;
+}
+@media (min-width: 640px) {
+  .stats-panel {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+
+.stats-head {
+  text-align: center;
+}
+
+.stats-emoji {
+  display: inline-block;
+  font-size: 2.25rem;
+  line-height: 2.5rem;
+  animation: emoji-pop 0.5s var(--ease-spring-bouncy) both;
+}
+
+.stats-title {
+  margin-top: 0.5rem;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  line-height: 2rem;
+}
+@media (min-width: 640px) {
+  .stats-title {
+    font-size: 1.875rem;
+    line-height: 2.25rem;
+  }
+}
+
+.stats-sub {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--chalkdim);
+}
+.stats-topic {
+  color: var(--chalk);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+@media (min-width: 640px) {
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* animation-delay is set inline per block for the staggered rise */
+.stat-block {
+  padding: 1rem 1.25rem;
+  animation: stat-rise 0.45s var(--ease-spring-soft) both;
+}
+.stat-value {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  line-height: 2rem;
+}
+@media (min-width: 640px) {
+  .stat-value {
+    font-size: 1.875rem;
+    line-height: 2.25rem;
+  }
+}
+.stat-label {
+  margin-top: 0.25rem;
+}
+.stat-sub {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--chalkdim);
+}
+
+.stats-empty {
+  padding: 1.5rem 1.25rem;
+  text-align: center;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--chalkdim);
+}
+
+.filler-panel {
+  padding: 1rem 1.25rem;
+}
+.filler-label {
+  margin-bottom: 0.5rem;
+}
+.filler-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+.filler-maybe {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: rgba(201, 195, 180, 0.6);
+}
+
+.stats-transcript {
+  padding: 1rem 1.25rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+.stats-transcript summary {
+  cursor: pointer;
+  color: var(--chalkdim);
+}
+.stats-transcript p {
+  margin-top: 0.75rem;
+  line-height: 1.625;
+  color: var(--chalkdim);
+}
+
+.stats-actions {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+@media (min-width: 640px) {
+  .stats-actions {
+    flex-direction: row;
+    justify-content: center;
+  }
+}
+.stats-retry {
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+.stats-next {
+  padding: 0.625rem 1.5rem;
+}
+
+@keyframes emoji-pop {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+@keyframes stat-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
