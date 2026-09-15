@@ -1,4 +1,5 @@
 import { formatDuration } from "../lib/analyzeSpeech.js";
+import PronunciationPanel from "./PronunciationPanel.jsx";
 import "./StatsPanel.css";
 
 function StatBlock({ label, value, sub, delay }) {
@@ -11,8 +12,68 @@ function StatBlock({ label, value, sub, delay }) {
   );
 }
 
+// Tiny inline-SVG loudness curve with pause ticks — no chart lib needed.
+function VolumeSpark({ spark, sparkPauses }) {
+  const W = 300;
+  const H = 56;
+  const PAD = 4;
+  const n = spark.length;
+  const MIN_DB = -60;
+  const x = (i) => PAD + (i / Math.max(n - 1, 1)) * (W - 2 * PAD);
+  const y = (db) => H - PAD - (Math.max(db, MIN_DB) - MIN_DB) / -MIN_DB * (H - 2 * PAD);
+  const points = spark.map((db, i) => `${x(i).toFixed(1)},${y(db).toFixed(1)}`).join(" ");
+
+  return (
+    <svg className="spark-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Volume over time">
+      <polyline points={points} fill="none" className="spark-line" />
+      {sparkPauses.map((p, i) => (
+        <line
+          key={i}
+          x1={PAD + p * (W - 2 * PAD)}
+          x2={PAD + p * (W - 2 * PAD)}
+          y1={H - 8}
+          y2={H - 2}
+          className="spark-pause"
+        />
+      ))}
+    </svg>
+  );
+}
+
 export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic }) {
   const hasTranscript = result.transcript?.trim().length > 0;
+  const a = stats.audio;
+
+  const blocks = [];
+  if (hasTranscript) {
+    blocks.push(
+      { label: "Words spoken", value: stats.wordCount },
+      { label: "Pace", value: `${stats.wpm} wpm`, sub: stats.pace },
+      {
+        label: "Filler words",
+        value: stats.fillerTotal,
+        sub: stats.fillerTotal ? `${stats.fillerRatio}% of speech` : "very clean!",
+      },
+      { label: "Keywords used", value: `${stats.keywordsUsed.length}/${stats.keywordsTotal}` }
+    );
+  }
+  if (a) {
+    blocks.push(
+      {
+        label: "Pauses",
+        value: a.pauseCount,
+        sub: a.pauseCount ? `longest ${a.longestPause}s · ${a.silencePct}% silence` : "smooth flow!",
+      },
+      { label: "Volume", value: a.volumeLabel, sub: `${a.meanDb} dB average` },
+      a.pitch
+        ? {
+            label: "Pitch variety",
+            value: a.pitch.label,
+            sub: `${a.pitch.rangeSt} semitone range`,
+          }
+        : { label: "Pitch variety", value: "—", sub: "not enough voiced audio" }
+    );
+  }
 
   return (
     <div className="stats-panel">
@@ -25,21 +86,11 @@ export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic }
         </p>
       </div>
 
-      {hasTranscript ? (
+      {blocks.length > 0 ? (
         <div className="stats-grid">
-          <StatBlock label="Words spoken" value={stats.wordCount} delay={0.05} />
-          <StatBlock label="Pace" value={`${stats.wpm} wpm`} sub={stats.pace} delay={0.1} />
-          <StatBlock
-            label="Filler words"
-            value={stats.fillerTotal}
-            sub={stats.fillerTotal ? `${stats.fillerRatio}% of speech` : "very clean!"}
-            delay={0.15}
-          />
-          <StatBlock
-            label="Keywords used"
-            value={`${stats.keywordsUsed.length}/${stats.keywordsTotal}`}
-            delay={0.2}
-          />
+          {blocks.map((b, i) => (
+            <StatBlock key={b.label} {...b} delay={0.05 * (i + 1)} />
+          ))}
         </div>
       ) : (
         <div className="card stats-empty">
@@ -47,6 +98,27 @@ export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic }
           {formatDuration(result.durationSeconds)} of practice. Try enabling microphone access or use
           Chrome/Edge for live stats next time.
         </div>
+      )}
+
+      {a && (
+        <div className="card card-dim audio-panel">
+          <p className="label-xs filler-label">volume over time</p>
+          <VolumeSpark spark={a.spark} sparkPauses={a.sparkPauses} />
+          <p className="spark-legend">
+            line = loudness · <span className="spark-legend-tick">ticks</span> = pauses
+          </p>
+          {a.tips.length > 0 && (
+            <ul className="audio-tips">
+              {a.tips.map((tip) => (
+                <li key={tip}>{tip}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {result.audioBlob && (
+        <PronunciationPanel audioBlob={result.audioBlob} transcript={result.transcript} />
       )}
 
       {hasTranscript && (stats.fillerTotal > 0 || stats.possibleFillerTotal > 0) && (

@@ -10,6 +10,7 @@ import { useLocalStorage } from "./hooks/useLocalStorage.js";
 import { getRandomTopic, TOPICS, DIFFICULTIES } from "./data/topics.js";
 import { generateAITopic } from "./lib/aiTopics.js";
 import { analyzeSpeech } from "./lib/analyzeSpeech.js";
+import { analyzeAudio } from "./lib/analyzeAudio.js";
 import "./App.css";
 
 // Local-calendar date as YYYY-MM-DD. (The old version used toISOString(),
@@ -169,6 +170,9 @@ export default function App() {
       durationSeconds: result.durationSeconds,
       keywords: topic.keywords,
     });
+    // Waveform metrics (pauses/volume/pitch) — null when the mic was denied
+    // or too little speech was captured.
+    stats.audio = analyzeAudio(result.audioSamples);
     setSessionResult({ result, stats });
 
     const today = dateKey();
