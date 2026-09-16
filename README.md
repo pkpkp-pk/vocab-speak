@@ -22,6 +22,21 @@ everywhere.
 Build for production with `npm run build`; preview that build with
 `npm run preview`.
 
+## Self-hosted model files
+
+`npm run dev` and `npm run build` first run `scripts/fetch-model.mjs`, which
+downloads the wav2vec2 files into `public/models/` (gitignored, ~91 MB,
+skipped if already present). The app then loads the model from its own
+origin — on Vercel that means your deployment's CDN, with immutable cache
+headers from `vercel.json`. If the local files are ever missing, the app
+falls back to downloading from the Hugging Face hub automatically.
+
+## Deploying to Vercel
+
+Import the repo, keep the default Vite preset (build command `npm run build`,
+output `dist`). The build fetches the model files and bundles them into
+`dist/models/`, so no extra configuration is needed.
+
 ## How it works
 
 - **Topic selection** — filter by category and difficulty, then shuffle
@@ -37,6 +52,17 @@ Build for production with `npm run build`; preview that build with
 - **Stats** — word count, words-per-minute, filler-word count/breakdown
   (um, uh, like, you know, etc.), and how many hint keywords you actually
   used, computed in `src/lib/analyzeSpeech.js`.
+- **Voice analysis** — pauses, loudness, and pitch variety measured from the
+  raw waveform with the Web Audio API (`src/lib/analyzeAudio.js`,
+  `src/lib/pitch.js`), so they work in any modern browser — no transcript
+  needed. Auto-gain is disabled at capture time on purpose, so the volume
+  stats reflect you, not your OS's gain riding.
+- **Deep pronunciation analysis** (experimental, opt-in on the results
+  screen) — scores each word by forced-aligning the transcript against a
+  wav2vec2 CTC model running in a Web Worker via transformers.js
+  (`src/lib/pronunciation.worker.js`, `src/lib/forcedAlign.js`). Runs fully
+  on-device; no API key. The ~91 MB quantized model is served from the app's
+  own origin (see below) and cached by the browser after the first run.
 - **AI bonus mode** (optional) — toggle "AI mode" in the header and paste
   your own Anthropic API key (gear icon) to generate fresh topics and
   keyword sets on demand instead of pulling from the local list. The key
@@ -49,9 +75,14 @@ Build for production with `npm run build`; preview that build with
 src/
   data/topics.js          curated offline topic bank
   hooks/useSpeechRecognition.js   mic transcription wrapper
+  hooks/useAudioAnalysis.js       mic capture: loudness + pitch sampling
   hooks/useLocalStorage.js        tiny persistence helper
   lib/analyzeSpeech.js     WPM / filler-word / keyword-usage stats
+  lib/analyzeAudio.js      pause / volume / pitch-variety stats
+  lib/pitch.js             YIN-lite pitch detector
   lib/aiTopics.js          optional AI topic generation
+  lib/pronunciation.worker.js   on-device wav2vec2 scoring (opt-in)
+  lib/forcedAlign.js       CTC forced alignment / greedy decode
   components/              Header, CategoryPicker, TopicCard, TimerRing,
                             KeywordHelper, SessionScreen, StatsPanel,
                             AISettingsModal

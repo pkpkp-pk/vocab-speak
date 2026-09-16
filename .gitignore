@@ -1,2 +1,4 @@
 node_modules/
 dist/
+# Downloaded at build time by scripts/fetch-model.mjs (~91 MB, no repo bloat)
+public/models/

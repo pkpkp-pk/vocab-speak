@@ -4,8 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "fetch-model": "node scripts/fetch-model.mjs",
+    "dev": "node scripts/fetch-model.mjs && vite",
+    "build": "node scripts/fetch-model.mjs && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

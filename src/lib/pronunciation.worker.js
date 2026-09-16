@@ -11,7 +11,7 @@
 //        { type: "done", words: [{ word, score }], decodedTranscript?, truncated }
 //        { type: "error", message }
 
-import { AutoProcessor, AutoModelForCTC, AutoTokenizer } from "@huggingface/transformers";
+import { AutoProcessor, AutoModelForCTC, AutoTokenizer, env } from "@huggingface/transformers";
 import {
   forcedAlign,
   greedyDecode,
@@ -23,6 +23,15 @@ import {
 const MODEL_ID = "Xenova/wav2vec2-base-960h";
 const CHUNK_SECONDS = 15; // per-inference window; logits are concatenated
 const SAMPLE_RATE = 16000;
+
+// Serve model files from our own origin (public/models/, populated by
+// scripts/fetch-model.mjs at build time) instead of huggingface.co.
+// allowLocalModels defaults to false in browsers, so enable it explicitly;
+// allowRemoteModels stays true, so a missing local file still falls back
+// to the Hugging Face hub. Either way the browser cache stores the result,
+// so the ~91 MB download happens once per browser, not per session.
+env.localModelPath = "/models/";
+env.allowLocalModels = true;
 
 let bundlePromise = null;
 

@@ -1,4 +1,5 @@
 import { formatDuration } from "../lib/analyzeSpeech.js";
+import { useLocalStorage } from "../hooks/useLocalStorage.js";
 import PronunciationPanel from "./PronunciationPanel.jsx";
 import "./StatsPanel.css";
 
@@ -43,6 +44,14 @@ function VolumeSpark({ spark, sparkPauses }) {
 export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic }) {
   const hasTranscript = result.transcript?.trim().length > 0;
   const a = stats.audio;
+
+  // Experimental on-device pronunciation scoring (wav2vec2) — hidden unless
+  // the user explicitly opts in here; the choice persists.
+  const [deepAnalysis, setDeepAnalysis] = useLocalStorage(
+    "speakstage.deepAnalysis",
+    false,
+    (v) => typeof v === "boolean"
+  );
 
   const blocks = [];
   if (hasTranscript) {
@@ -118,7 +127,26 @@ export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic }
       )}
 
       {result.audioBlob && (
-        <PronunciationPanel audioBlob={result.audioBlob} transcript={result.transcript} />
+        <>
+          <div className="deep-toggle-row">
+            <button
+              role="switch"
+              aria-checked={deepAnalysis}
+              aria-label="Toggle deep pronunciation analysis"
+              onClick={() => setDeepAnalysis(!deepAnalysis)}
+              className={`deep-toggle ${deepAnalysis ? "on" : ""}`}
+            >
+              <span className="deep-toggle-knob" />
+            </button>
+            <span className="deep-toggle-label">
+              deep pronunciation analysis{" "}
+              <span className="deep-toggle-sub">experimental · runs on-device · ~95 MB model</span>
+            </span>
+          </div>
+          {deepAnalysis && (
+            <PronunciationPanel audioBlob={result.audioBlob} transcript={result.transcript} />
+          )}
+        </>
       )}
 
       {hasTranscript && (stats.fillerTotal > 0 || stats.possibleFillerTotal > 0) && (
