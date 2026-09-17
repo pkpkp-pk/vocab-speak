@@ -1,5 +1,6 @@
 // Sanity tests for the pure analysis modules (run with: node scripts/test-audio-libs.mjs)
 import { analyzeAudio } from "../src/lib/analyzeAudio.js";
+import { alignTranscript } from "../src/lib/alignTranscript.js";
 import { detectPitch } from "../src/lib/pitch.js";
 import {
   forcedAlign,
@@ -97,6 +98,36 @@ const idToChar = [];
 idToChar[4] = "|"; idToChar[11] = "H"; idToChar[10] = "I";
 check("greedyDecode recovers 'hi'", greedyDecode(logProbs, T, V, idToChar) === "hi",
   `got "${greedyDecode(logProbs, T, V, idToChar)}"`);
+
+// ---- alignTranscript: two segments separated by a real silence ----
+// Timeline (60fps): 1-3s voiced at -22 dB, 3-5.5s silence, 5.5-8.5s voiced at -15 dB.
+const atSamples = [];
+for (let i = 0; i < 9 * 60; i++) {
+  const t = i / 60;
+  const voiced = (t >= 1 && t < 3) || (t >= 5.5 && t < 8.5);
+  atSamples.push({ t, rmsDb: voiced ? (t < 4 ? -22 : -15) : -62, f0: null });
+}
+const atSegments = [
+  { text: "hello there", endedAt: 3.6 },   // finalized just after the first utterance
+  { text: "louder now friend", endedAt: 9.0 }, // ends a bit past the audio
+];
+const tokens = alignTranscript(atSegments, atSamples);
+check("alignTranscript returns tokens", Array.isArray(tokens) && tokens.length > 0);
+const heatWords = tokens?.filter((t) => t.type === "word") ?? [];
+const heatPauses = tokens?.filter((t) => t.type === "pause") ?? [];
+check("all 5 words placed", heatWords.length === 5, `got ${heatWords.length}`);
+check("one pause marker ≈2.5s", heatPauses.length === 1 && Math.abs(heatPauses[0].dur - 2.5) < 0.4,
+  heatPauses.length ? `got ${heatPauses[0].dur}s` : "none");
+check("pause sits between the two segments",
+  tokens && tokens.findIndex((t) => t.type === "pause") === 2,
+  `index ${tokens?.findIndex((t) => t.type === "pause")}`);
+const firstSegDb = heatWords.slice(0, 2).map((w) => w.db);
+const secondSegDb = heatWords.slice(2).map((w) => w.db);
+check("segment volumes match waveform (-22 vs -15 dB)",
+  firstSegDb.every((d) => Math.abs(d - -22) < 1.5) && secondSegDb.every((d) => Math.abs(d - -15) < 1.5),
+  `got ${JSON.stringify([firstSegDb, secondSegDb])}`);
+check("graceful null with no segments", alignTranscript([], atSamples) === null);
+check("graceful null with no samples", alignTranscript(atSegments, []) === null);
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nall green");
 process.exit(failures ? 1 : 0);

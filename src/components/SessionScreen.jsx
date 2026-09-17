@@ -5,6 +5,21 @@ import { useSpeechRecognition } from "../hooks/useSpeechRecognition.js";
 import { useAudioAnalysis } from "../hooks/useAudioAnalysis.js";
 import "./SessionScreen.css";
 
+// Human-readable copy for SpeechRecognition error codes.
+function friendlySpeechError(code) {
+  switch (code) {
+    case "not-allowed":
+      return "Microphone access is blocked — allow it via the address-bar icon, then retry.";
+    case "audio-capture":
+      return "No microphone signal — check your input device.";
+    case "service-not-allowed":
+    case "network":
+      return "Chrome's speech service is unreachable — check your connection.";
+    default:
+      return `Transcription error: ${code}.`;
+  }
+}
+
 export default function SessionScreen({ topic, targetSeconds, onFinish, onExit }) {
   const [elapsed, setElapsed] = useState(0);
   const [revealedCount, setRevealedCount] = useState(0);
@@ -41,10 +56,16 @@ export default function SessionScreen({ topic, targetSeconds, onFinish, onExit }
 
   const beginSession = async () => {
     setRunning(true);
-    if (speech.supported) speech.start();
+    // One shared clock for speech segments and audio samples — the waveform
+    // alignment on the results screen depends on both using the same t0.
+    const t0 = performance.now();
 
-    // Audio analysis + recording share one mic stream (one permission prompt).
-    const stream = await audio.start();
+    // Acquire the mic FIRST: a single getUserMedia prompt settles the
+    // permission, then SpeechRecognition starts cleanly. (Starting both at
+    // once races the two requests and recognition can fail with
+    // "not-allowed"/"audio-capture" while the prompt is still open.)
+    const stream = await audio.start(t0);
+    if (speech.supported) speech.start(t0);
     if (stream && typeof MediaRecorder !== "undefined") {
       chunksRef.current = [];
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -64,13 +85,23 @@ export default function SessionScreen({ topic, targetSeconds, onFinish, onExit }
     clearInterval(intervalRef.current);
     if (speech.supported) speech.stop();
 
+    // Timestamped final segments for waveform alignment. If the user finishes
+    // mid-thought, the trailing interim text isn't in any segment yet — append
+    // it so the annotated transcript covers everything that was said.
+    const speechSegments = speech.supported ? speech.getSegments().slice() : [];
+    const joined = speechSegments.map((s) => s.text).join(" ").trim();
+    const full = speech.fullTranscript;
+    const leftover = full.length > joined.length ? full.slice(joined.length).trim() : "";
+    if (leftover) speechSegments.push({ text: leftover, endedAt: elapsed });
+
     const finish = (audioBlob) =>
       onFinish({
-        transcript: speech.fullTranscript,
+        transcript: full,
         durationSeconds: elapsed,
         keywordsRevealed: revealedCount,
         audioSamples: audio.stop(),
         audioBlob,
+        speechSegments,
       });
 
     // Let MediaRecorder flush its final chunk before finishing.
@@ -107,10 +138,19 @@ export default function SessionScreen({ topic, targetSeconds, onFinish, onExit }
             <div className="transcript-live">
               <span className="transcript-final">{speech.finalTranscript}</span>
               <span className="transcript-interim">{speech.interimTranscript}</span>
-              {!speech.finalTranscript && !speech.interimTranscript && (
+              {!speech.error && !speech.finalTranscript && !speech.interimTranscript && (
                 <span className="transcript-waiting">listening…</span>
               )}
             </div>
+          )}
+
+          {speech.error && (
+            <p className="session-error">
+              {friendlySpeechError(speech.error)}{" "}
+              <button className="session-error-retry" onClick={() => speech.start()}>
+                retry
+              </button>
+            </p>
           )}
 
           <KeywordHelper keywords={topic.keywords} revealedCount={revealedCount} onReveal={revealKeywords} />

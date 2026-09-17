@@ -33,7 +33,9 @@ export function useAudioAnalysis() {
   // Safety net for unmounting mid-session (e.g. "exit session").
   useEffect(() => teardown, [teardown]);
 
-  const start = useCallback(async () => {
+  // startTime lets the caller share one clock with speech recognition, so
+  // sample timestamps and transcript segment timestamps are comparable.
+  const start = useCallback(async (startTime) => {
     if (!supported) return null;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -51,7 +53,7 @@ export function useAudioAnalysis() {
 
       const buf = new Float32Array(analyser.fftSize);
       samplesRef.current = [];
-      const t0 = performance.now();
+      const t0 = startTime ?? performance.now();
       const tick = () => {
         analyser.getFloatTimeDomainData(buf);
         let sum = 0;

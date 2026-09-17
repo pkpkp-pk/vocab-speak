@@ -11,6 +11,7 @@ import { getRandomTopic, TOPICS, DIFFICULTIES } from "./data/topics.js";
 import { generateAITopic } from "./lib/aiTopics.js";
 import { analyzeSpeech } from "./lib/analyzeSpeech.js";
 import { analyzeAudio } from "./lib/analyzeAudio.js";
+import { alignTranscript } from "./lib/alignTranscript.js";
 import "./App.css";
 
 // Local-calendar date as YYYY-MM-DD. (The old version used toISOString(),
@@ -173,6 +174,9 @@ export default function App() {
     // Waveform metrics (pauses/volume/pitch) — null when the mic was denied
     // or too little speech was captured.
     stats.audio = analyzeAudio(result.audioSamples);
+    // Transcript words aligned onto the waveform (per-word volume + pause
+    // markers) — null when either side is missing.
+    stats.annotated = alignTranscript(result.speechSegments, result.audioSamples);
     setSessionResult({ result, stats });
 
     const today = dateKey();

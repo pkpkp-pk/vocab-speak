@@ -18,6 +18,9 @@ export function useSpeechRecognition() {
   const recognitionRef = useRef(null);
   const finalRef = useRef("");
   const shouldRestartRef = useRef(false);
+  // Per-final-result timing, for aligning the transcript to the waveform.
+  const segmentsRef = useRef([]);
+  const t0Ref = useRef(0);
 
   useEffect(() => {
     if (!SpeechRecognitionAPI) return undefined;
@@ -33,6 +36,13 @@ export function useSpeechRecognition() {
         const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
           finalRef.current += transcript + " ";
+          // Chrome typically finalizes a segment when the speaker pauses, so
+          // this arrival time anchors the segment to the waveform (with a
+          // small lag, compensated for in alignTranscript).
+          segmentsRef.current.push({
+            text: transcript.trim(),
+            endedAt: (performance.now() - t0Ref.current) / 1000,
+          });
         } else {
           interim += transcript;
         }
@@ -43,9 +53,12 @@ export function useSpeechRecognition() {
 
     recognition.onerror = (event) => {
       // "no-speech" fires often during natural pauses — not a real error.
-      if (event.error !== "no-speech") {
-        setError(event.error);
-      }
+      if (event.error === "no-speech") return;
+      // Fatal errors will never recover by restarting — stop the
+      // onend→start loop from hammering them forever.
+      const FATAL = ["not-allowed", "audio-capture", "service-not-allowed", "language-not-supported"];
+      if (FATAL.includes(event.error)) shouldRestartRef.current = false;
+      setError(event.error);
     };
 
     recognition.onend = () => {
@@ -69,8 +82,12 @@ export function useSpeechRecognition() {
     };
   }, []);
 
-  const start = useCallback(() => {
+  // startTime lets the caller share one clock with the audio sampler, so
+  // segment timestamps and audio samples live on the same timeline.
+  const start = useCallback((startTime) => {
     if (!recognitionRef.current) return;
+    t0Ref.current = startTime ?? performance.now();
+    segmentsRef.current = [];
     finalRef.current = "";
     setFinalTranscript("");
     setInterimTranscript("");
@@ -93,9 +110,12 @@ export function useSpeechRecognition() {
 
   const reset = useCallback(() => {
     finalRef.current = "";
+    segmentsRef.current = [];
     setFinalTranscript("");
     setInterimTranscript("");
   }, []);
+
+  const getSegments = useCallback(() => segmentsRef.current, []);
 
   return {
     supported,
@@ -107,5 +127,6 @@ export function useSpeechRecognition() {
     start,
     stop,
     reset,
+    getSegments,
   };
 }

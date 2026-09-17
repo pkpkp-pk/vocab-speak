@@ -98,6 +98,24 @@
   color: rgba(201, 195, 180, 0.7);
 }
 
+.session-error {
+  max-width: 24rem;
+  text-align: center;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--coral);
+}
+.session-error-retry {
+  margin-left: 0.375rem;
+  font-size: 0.8125rem;
+  color: var(--amber);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.session-error-retry:hover {
+  color: var(--chalk);
+}
+
 .session-exit {
   font-size: 0.75rem;
   color: rgba(201, 195, 180, 0.6);

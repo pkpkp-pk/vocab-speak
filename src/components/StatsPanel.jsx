@@ -1,6 +1,7 @@
 import { formatDuration } from "../lib/analyzeSpeech.js";
 import { useLocalStorage } from "../hooks/useLocalStorage.js";
 import PronunciationPanel from "./PronunciationPanel.jsx";
+import TranscriptHeatmap from "./TranscriptHeatmap.jsx";
 import "./StatsPanel.css";
 
 function StatBlock({ label, value, sub, delay }) {
@@ -173,12 +174,21 @@ export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic }
         </div>
       )}
 
-      {hasTranscript && (
+      {hasTranscript && stats.annotated ? (
+        <div className="card card-dim stats-transcript">
+          <p className="label-xs filler-label">transcript · volume per word</p>
+          <TranscriptHeatmap tokens={stats.annotated} />
+          <p className="th-legend">
+            <span className="th-legend-swatch" /> stronger highlight = louder ·{" "}
+            <span className="th-legend-pause">⏸</span> = pause · hover a word for its dB level
+          </p>
+        </div>
+      ) : hasTranscript ? (
         <details className="card card-dim stats-transcript">
           <summary>view full transcript</summary>
           <p>{result.transcript}</p>
         </details>
-      )}
+      ) : null}
 
       <div className="stats-actions">
         <button onClick={onRetry} className="btn-ghost stats-retry">

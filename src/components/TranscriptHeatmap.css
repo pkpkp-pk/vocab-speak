@@ -1,0 +1,43 @@
+.th-words {
+  line-height: 2.1;
+  font-size: 0.9375rem;
+  color: var(--chalk);
+}
+
+.th-word {
+  padding: 0.1rem 0.25rem;
+  margin-right: 0.2rem;
+  border-radius: 0.3rem;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.th-pause {
+  display: inline-block;
+  margin: 0 0.4rem;
+  padding: 0 0.5rem;
+  border: 1px solid rgba(255, 93, 115, 0.45);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--coral);
+  white-space: nowrap;
+}
+
+.th-legend {
+  margin-top: 0.625rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: rgba(201, 195, 180, 0.6);
+}
+.th-legend-swatch {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  border-radius: 0.2rem;
+  background: rgba(242, 193, 78, 0.35);
+  vertical-align: -0.1em;
+}
+.th-legend-pause {
+  color: var(--coral);
+}

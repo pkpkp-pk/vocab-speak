@@ -26,14 +26,19 @@ function percentile(sorted, p) {
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
 }
 
+// Boolean per-sample speech/silence mask, adaptive to the recording's noise
+// floor. Exported for alignTranscript.js as well as used internally.
+export function voicedMask(samples) {
+  const levels = samples.map((s) => s.rmsDb);
+  const sorted = [...levels].sort((a, b) => a - b);
+  const threshold = Math.max(percentile(sorted, 0.1) + FLOOR_MARGIN_DB, -55);
+  return levels.map((l) => l >= threshold);
+}
+
 export function analyzeAudio(samples) {
   if (!samples || samples.length < 20) return null;
 
-  const levels = samples.map((s) => s.rmsDb);
-  const sortedLevels = [...levels].sort((a, b) => a - b);
-  const floor = percentile(sortedLevels, 0.1);
-  const threshold = Math.max(floor + FLOOR_MARGIN_DB, -55);
-  const voiced = levels.map((l) => l >= threshold);
+  const voiced = voicedMask(samples);
 
   // Clip analysis to the region actually containing speech.
   let first = voiced.indexOf(true);
