@@ -102,6 +102,8 @@ export default function SessionScreen({ topic, targetSeconds, onFinish, onExit }
         audioSamples: audio.stop(),
         audioBlob,
         speechSegments,
+        // "um"/"uh" Chrome stripped from finals, recovered from interims.
+        strippedFillers: speech.supported ? { ...speech.getStrippedFillers() } : {},
       });
 
     // Let MediaRecorder flush its final chunk before finishing.

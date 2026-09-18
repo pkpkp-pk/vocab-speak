@@ -51,7 +51,11 @@ output `dist`). The build fetches the model files and bundles them into
   API, entirely client-side, no server or API key needed for this part.
 - **Stats** — word count, words-per-minute, filler-word count/breakdown
   (um, uh, like, you know, etc.), and how many hint keywords you actually
-  used, computed in `src/lib/analyzeSpeech.js`.
+  used, computed in `src/lib/analyzeSpeech.js`. Chrome's recognizer silently
+  drops "um"/"uh" from final transcripts, so fillers are recovered two ways:
+  by diffing interim snapshots against the finalized text
+  (`diffStrippedFillers`), and by flagging short voiced regions in the
+  waveform that no transcript words landed on (`alignTranscript`).
 - **Voice analysis** — pauses, loudness, and pitch variety measured from the
   raw waveform with the Web Audio API (`src/lib/analyzeAudio.js`,
   `src/lib/pitch.js`), so they work in any modern browser — no transcript

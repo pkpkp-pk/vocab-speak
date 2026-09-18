@@ -9,13 +9,17 @@
 //
 // segments: [{ text, endedAt }] — seconds since session start
 // samples:  [{ t, rmsDb }]     — from useAudioAnalysis
-// returns:  [{ type: "word", text, db } | { type: "pause", dur }] | null
+// returns:  { tokens, leftoverCount, leftoverSeconds } | null
+//   tokens: [{ type: "word", text, db } | { type: "pause", dur }]
+//   leftover*: short voiced regions no transcript words landed on — usually
+//   spoken "um"/"uh" that Chrome dropped from the transcript.
 
 import { voicedMask } from "./analyzeAudio.js";
 
 const RECOGNITION_LAG_S = 0.7; // how far behind speech the API typically is
 const MIN_REGION_S = 0.15; // ignore voiced blips shorter than this
 const MIN_PAUSE_S = 0.3; // gaps shorter than this aren't worth a marker
+const LEFTOVER_MAX_S = 0.8; // longer unassigned regions are missed phrases, not disfluencies
 
 export function alignTranscript(segments, samples) {
   const usableSegments = (segments ?? []).filter((s) => s.text?.trim());
@@ -38,6 +42,7 @@ export function alignTranscript(segments, samples) {
   if (!usable.length) return null;
 
   const tokens = [];
+  const assigned = new Set(); // region indices that received transcript words
   let ri = 0;
   let prevRi = -1;
   let regionCursor = usable[0].start;
@@ -52,6 +57,7 @@ export function alignTranscript(segments, samples) {
     ) {
       ri++;
     }
+    assigned.add(ri);
 
     // A jump to a later region with real silence in between = a pause marker.
     if (prevRi !== -1 && ri > prevRi) {
@@ -85,5 +91,22 @@ export function alignTranscript(segments, samples) {
     prevRi = ri;
   }
 
-  return tokens;
+  // Short voiced regions that no transcript words landed on. Chrome strips
+  // disfluencies from finalized text, so a 0.15–0.8s region sitting between
+  // word-carrying ones was very likely a spoken "um"/"uh" that never made it
+  // into the transcript. (Ones glued to neighbouring words inside the same
+  // region are invisible here — the interim diff covers those.) Longer
+  // unassigned regions are treated as missed phrases, not fillers.
+  let leftoverCount = 0;
+  let leftoverSeconds = 0;
+  usable.forEach((region, i) => {
+    if (assigned.has(i)) return;
+    const dur = region.end - region.start;
+    if (dur <= LEFTOVER_MAX_S) {
+      leftoverCount++;
+      leftoverSeconds += dur;
+    }
+  });
+
+  return { tokens, leftoverCount, leftoverSeconds: +leftoverSeconds.toFixed(1) };
 }

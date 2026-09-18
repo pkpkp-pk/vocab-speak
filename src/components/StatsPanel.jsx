@@ -45,6 +45,8 @@ function VolumeSpark({ spark, sparkPauses }) {
 export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic }) {
   const hasTranscript = result.transcript?.trim().length > 0;
   const a = stats.audio;
+  // Short voiced regions in the waveform that no transcript words landed on.
+  const leftoverCount = stats.annotated?.leftoverCount ?? 0;
 
   // Experimental on-device pronunciation scoring (wav2vec2) — hidden unless
   // the user explicitly opts in here; the choice persists.
@@ -150,7 +152,8 @@ export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic }
         </>
       )}
 
-      {hasTranscript && (stats.fillerTotal > 0 || stats.possibleFillerTotal > 0) && (
+      {hasTranscript &&
+        (stats.fillerTotal > 0 || stats.possibleFillerTotal > 0 || leftoverCount > 0) && (
         <div className="card card-dim filler-panel">
           <p className="label-xs filler-label">filler word breakdown</p>
           {stats.fillerTotal > 0 && (
@@ -161,6 +164,18 @@ export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic }
                 </span>
               ))}
             </div>
+          )}
+          {stats.strippedFillerTotal > 0 && (
+            <p className="filler-maybe">
+              {stats.strippedFillerTotal} of these were caught live — Chrome's transcript
+              silently drops "um"/"uh"
+            </p>
+          )}
+          {leftoverCount > 0 && (
+            <p className="filler-maybe">
+              plus {leftoverCount} short untranscribed sound{leftoverCount === 1 ? "" : "s"} in
+              the waveform — likely "um"/"uh" said next to a pause
+            </p>
           )}
           {stats.possibleFillerTotal > 0 && (
             <p className="filler-maybe">
@@ -177,7 +192,7 @@ export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic }
       {hasTranscript && stats.annotated ? (
         <div className="card card-dim stats-transcript">
           <p className="label-xs filler-label">transcript · volume per word</p>
-          <TranscriptHeatmap tokens={stats.annotated} />
+          <TranscriptHeatmap tokens={stats.annotated.tokens} />
           <p className="th-legend">
             <span className="th-legend-swatch" /> stronger highlight = louder ·{" "}
             <span className="th-legend-pause">⏸</span> = pause · hover a word for its dB level

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { diffStrippedFillers } from "../lib/analyzeSpeech.js";
 
 // Wraps the browser's SpeechRecognition API (Chrome/Edge; Safari partial support).
 // Falls back gracefully — `supported` tells the UI whether to show mic-based features.
@@ -21,6 +22,13 @@ export function useSpeechRecognition() {
   // Per-final-result timing, for aligning the transcript to the waveform.
   const segmentsRef = useRef([]);
   const t0Ref = useRef(0);
+  // Latest interim text per result index — diffed against the final text when
+  // a result finalizes, to recover the "um"/"uh" Chrome strips (see
+  // diffStrippedFillers in analyzeSpeech.js).
+  const interimSnapshotsRef = useRef(new Map());
+  const lastResultIndexRef = useRef(0);
+  // Disfluencies recovered so far, { word: count }.
+  const strippedFillersRef = useRef({});
 
   useEffect(() => {
     if (!SpeechRecognitionAPI) return undefined;
@@ -31,6 +39,12 @@ export function useSpeechRecognition() {
     recognition.lang = "en-US";
 
     recognition.onresult = (event) => {
+      // A drop in resultIndex means the results list was rebuilt (the
+      // recognizer auto-stopped and onend restarted it) — interim snapshots
+      // from the old list are stale and must go.
+      if (event.resultIndex < lastResultIndexRef.current) interimSnapshotsRef.current.clear();
+      lastResultIndexRef.current = event.resultIndex;
+
       let interim = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
@@ -43,7 +57,17 @@ export function useSpeechRecognition() {
             text: transcript.trim(),
             endedAt: (performance.now() - t0Ref.current) / 1000,
           });
+          // The interim snapshot often still has the "um"/"uh" that the
+          // final's cleanup dropped — keep whatever vanished.
+          const snapshot = interimSnapshotsRef.current.get(i);
+          if (snapshot) {
+            interimSnapshotsRef.current.delete(i);
+            for (const [word, n] of Object.entries(diffStrippedFillers(snapshot, transcript))) {
+              strippedFillersRef.current[word] = (strippedFillersRef.current[word] ?? 0) + n;
+            }
+          }
         } else {
+          interimSnapshotsRef.current.set(i, transcript);
           interim += transcript;
         }
       }
@@ -88,6 +112,9 @@ export function useSpeechRecognition() {
     if (!recognitionRef.current) return;
     t0Ref.current = startTime ?? performance.now();
     segmentsRef.current = [];
+    interimSnapshotsRef.current.clear();
+    lastResultIndexRef.current = 0;
+    strippedFillersRef.current = {};
     finalRef.current = "";
     setFinalTranscript("");
     setInterimTranscript("");
@@ -111,11 +138,15 @@ export function useSpeechRecognition() {
   const reset = useCallback(() => {
     finalRef.current = "";
     segmentsRef.current = [];
+    interimSnapshotsRef.current.clear();
+    lastResultIndexRef.current = 0;
+    strippedFillersRef.current = {};
     setFinalTranscript("");
     setInterimTranscript("");
   }, []);
 
   const getSegments = useCallback(() => segmentsRef.current, []);
+  const getStrippedFillers = useCallback(() => strippedFillersRef.current, []);
 
   return {
     supported,
@@ -128,5 +159,6 @@ export function useSpeechRecognition() {
     stop,
     reset,
     getSegments,
+    getStrippedFillers,
   };
 }

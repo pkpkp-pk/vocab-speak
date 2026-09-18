@@ -1,5 +1,6 @@
 // Sanity tests for the pure analysis modules (run with: node scripts/test-audio-libs.mjs)
 import { analyzeAudio } from "../src/lib/analyzeAudio.js";
+import { analyzeSpeech, diffStrippedFillers } from "../src/lib/analyzeSpeech.js";
 import { alignTranscript } from "../src/lib/alignTranscript.js";
 import { detectPitch } from "../src/lib/pitch.js";
 import {
@@ -111,8 +112,11 @@ const atSegments = [
   { text: "hello there", endedAt: 3.6 },   // finalized just after the first utterance
   { text: "louder now friend", endedAt: 9.0 }, // ends a bit past the audio
 ];
-const tokens = alignTranscript(atSegments, atSamples);
+const aligned = alignTranscript(atSegments, atSamples);
+const tokens = aligned?.tokens;
 check("alignTranscript returns tokens", Array.isArray(tokens) && tokens.length > 0);
+check("no leftover sounds when every region has words", aligned?.leftoverCount === 0,
+  `got ${aligned?.leftoverCount}`);
 const heatWords = tokens?.filter((t) => t.type === "word") ?? [];
 const heatPauses = tokens?.filter((t) => t.type === "pause") ?? [];
 check("all 5 words placed", heatWords.length === 5, `got ${heatWords.length}`);
@@ -128,6 +132,48 @@ check("segment volumes match waveform (-22 vs -15 dB)",
   `got ${JSON.stringify([firstSegDb, secondSegDb])}`);
 check("graceful null with no segments", alignTranscript([], atSamples) === null);
 check("graceful null with no samples", alignTranscript(atSegments, []) === null);
+
+// ---- filler recovery A: interims Chrome cleans before finalizing ----
+const d1 = diffStrippedFillers("Um, so basically", "so basically");
+check("diff recovers a stripped um", d1.um === 1, JSON.stringify(d1));
+check("diff ignores non-filler revisions",
+  Object.keys(diffStrippedFillers("their going there", "they're going there")).length === 0);
+check("diff counts repeats", diffStrippedFillers("um um okay", "okay").um === 2);
+check("diff is a multiset diff", diffStrippedFillers("um um okay", "um okay").um === 1);
+check("diff clean when nothing vanished",
+  Object.keys(diffStrippedFillers("so basically", "so basically")).length === 0);
+const s1 = analyzeSpeech("i said", { durationSeconds: 10, strippedFillers: { um: 1 } });
+check("analyzeSpeech merges stripped fillers",
+  s1.fillerTotal === 1 && s1.fillerCounts.um === 1 && s1.strippedFillerTotal === 1,
+  JSON.stringify(s1.fillerCounts));
+check("merged ratio uses transcript word count", s1.fillerRatio === 50, `${s1.fillerRatio}`);
+const s2 = analyzeSpeech("you know i said", { durationSeconds: 10 });
+check("no stripped input keeps totals unchanged",
+  s2.fillerTotal === 1 && s2.strippedFillerTotal === 0, `total ${s2.fillerTotal}`);
+
+// ---- filler recovery B: short voiced regions with no transcript words ----
+// Regions: 1-3s (words), 3.8-4.2s (a spoken "um" — no segment), 5-8s (words).
+const loSamples = [];
+for (let i = 0; i < 8 * 60; i++) {
+  const t = i / 60;
+  const voiced = (t >= 1 && t < 3) || (t >= 3.8 && t < 4.2) || (t >= 5 && t < 8);
+  loSamples.push({ t, rmsDb: voiced ? -20 : -62, f0: null });
+}
+const loAligned = alignTranscript(
+  [{ text: "hello there", endedAt: 3.6 }, { text: "louder now friend", endedAt: 8.6 }],
+  loSamples
+);
+check("leftover: untranscribed region detected", loAligned?.leftoverCount === 1,
+  `got ${loAligned?.leftoverCount}`);
+check("leftover: duration ≈0.4s", loAligned && Math.abs(loAligned.leftoverSeconds - 0.4) < 0.15,
+  `got ${loAligned?.leftoverSeconds}`);
+check("leftover: words still placed on their regions",
+  loAligned && loAligned.tokens.filter((tk) => tk.type === "word").length === 5,
+  `got ${loAligned?.tokens.filter((tk) => tk.type === "word").length}`);
+// A long unassigned region (a missed phrase) must not count as a filler.
+const loBig = alignTranscript([{ text: "hello there friend", endedAt: 8.6 }], loSamples);
+check("long unassigned region is not a leftover", loBig?.leftoverCount === 1,
+  `got ${loBig?.leftoverCount}`);
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nall green");
 process.exit(failures ? 1 : 0);

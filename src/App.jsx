@@ -170,12 +170,14 @@ export default function App() {
     const stats = analyzeSpeech(result.transcript, {
       durationSeconds: result.durationSeconds,
       keywords: topic.keywords,
+      // "um"/"uh" recovered from interim diffs — Chrome drops them from finals.
+      strippedFillers: result.strippedFillers,
     });
     // Waveform metrics (pauses/volume/pitch) — null when the mic was denied
     // or too little speech was captured.
     stats.audio = analyzeAudio(result.audioSamples);
-    // Transcript words aligned onto the waveform (per-word volume + pause
-    // markers) — null when either side is missing.
+    // Transcript words aligned onto the waveform (per-word volume, pause
+    // markers, untranscribed-sound count) — null when either side is missing.
     stats.annotated = alignTranscript(result.speechSegments, result.audioSamples);
     setSessionResult({ result, stats });
 
