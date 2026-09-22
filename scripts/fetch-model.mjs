@@ -37,7 +37,10 @@ const MODELS = [
       "tokenizer.json",
       "tokenizer_config.json",
       "onnx/encoder_model_quantized.onnx", // q8, ~20 MB
-      "onnx/decoder_model_merged_quantized.onnx", // q8, ~42 MB
+      // q4 decoder — the int8 (quantized) decoder crashes onnxruntime-WEB
+      // (Missing required scale on embed_tokens). Must match DTYPE in
+      // src/lib/asr.worker.js.
+      "onnx/decoder_model_merged_q4.onnx", // q4, ~45 MB
     ],
   },
 ];

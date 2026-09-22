@@ -7,7 +7,9 @@
 import { TARGET_SAMPLE_RATE } from "./decodeAudio.js";
 import { encodeWavPcm16 } from "./wav.js";
 
-const MODEL = "gemini-2.5-flash";
+// Retired models 404 for new keys ("no longer available to new users") —
+// bump this when Google's error says so.
+const MODEL = "gemini-3.6-flash";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 // Longer than the topic request: multi-MB audio upload + multimodal inference.
 const REQUEST_TIMEOUT_MS = 60000;

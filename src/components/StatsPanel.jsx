@@ -50,11 +50,11 @@ export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic, 
   // Short voiced regions in the waveform that no transcript words landed on.
   const leftoverCount = stats.annotated?.leftoverCount ?? 0;
 
-  // Experimental on-device pronunciation scoring (wav2vec2) — hidden unless
-  // the user explicitly opts in here; the choice persists.
+  // On-device pronunciation scoring (wav2vec2) — ON by default; the toggle
+  // is the opt-OUT, and the choice persists.
   const [deepAnalysis, setDeepAnalysis] = useLocalStorage(
     "speakstage.deepAnalysis",
-    false,
+    true,
     (v) => typeof v === "boolean"
   );
 
@@ -145,7 +145,9 @@ export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic, 
             </button>
             <span className="deep-toggle-label">
               deep pronunciation analysis{" "}
-              <span className="deep-toggle-sub">experimental · runs on-device · ~95 MB model</span>
+              <span className="deep-toggle-sub">
+                on by default · runs on-device · ~95 MB first run
+              </span>
             </span>
           </div>
           {deepAnalysis && (

@@ -3,6 +3,7 @@
 // progress passthrough.
 
 let worker = null;
+let inFlight = null; // StrictMode dev double-mount fires the auto-run twice
 
 function getWorker() {
   worker ??= new Worker(new URL("./pronunciation.worker.js", import.meta.url), {
@@ -12,7 +13,7 @@ function getWorker() {
 }
 
 export function analyzePronunciation({ audio, transcript }, onProgress) {
-  return new Promise((resolve, reject) => {
+  inFlight ??= new Promise((resolve, reject) => {
     const w = getWorker();
     const onMessage = (e) => {
       const m = e.data;
@@ -31,5 +32,8 @@ export function analyzePronunciation({ audio, transcript }, onProgress) {
     // Copy so the caller's buffer survives the transfer.
     const copy = audio.slice();
     w.postMessage({ type: "analyze", audio: copy, transcript }, [copy.buffer]);
+  }).finally(() => {
+    inFlight = null;
   });
+  return inFlight;
 }

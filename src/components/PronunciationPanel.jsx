@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { decodeToMono16k, MAX_ANALYZED_SECONDS } from "../lib/decodeAudio.js";
 import { analyzePronunciation } from "../lib/pronunciation.js";
 import "./PronunciationPanel.css";
@@ -48,6 +48,17 @@ export default function PronunciationPanel({ audioBlob, transcript, onWordSpans 
   };
 
   const weak = result?.words.filter((w) => w.score < OK_SCORE) ?? [];
+
+  // Deep analysis is default-on: run as soon as the panel mounts. The ref
+  // guard absorbs StrictMode's dev double-effect; the worker wrapper dedupes
+  // a second in-flight call regardless.
+  const didAutoRun = useRef(false);
+  useEffect(() => {
+    if (didAutoRun.current) return;
+    didAutoRun.current = true;
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="card card-dim pron-panel">

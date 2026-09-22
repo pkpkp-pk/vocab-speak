@@ -116,7 +116,7 @@ src/
   opportunities → the whole row is one unbreakable word → overflows the card.
   Regression-tested in the suite via SSR markup check.
 
-**Deep pronunciation (opt-in toggle, `speakstage.deepAnalysis`)**
+**Deep pronunciation (default-ON; toggle `speakstage.deepAnalysis` is opt-OUT)**
 - Model `Xenova/wav2vec2-base-960h` (q8, ~91 MB) served same-origin from
   `/models/` — fetched at build time into gitignored `public/models/`, immutable
   cache headers in `vercel.json`, HF remote fallback stays enabled.
@@ -124,7 +124,15 @@ src/
   `AutoTokenizer` separately; `get_vocab()` returns a `Map`, not an object.
 - Worker sets `env.localModelPath = "/models/"` and `env.allowLocalModels = true`
   (defaults to false in browsers).
-- User found this model's quality mediocre — keep it behind the toggle.
+- PronunciationPanel auto-runs on mount; `pronunciation.js` dedupes in-flight
+  runs (StrictMode dev double-effect).
+- Moonshine dtype gotcha: int8 ("quantized") decoder crashes onnxruntime-WEB
+  ("Missing required scale" on embed_tokens) though onnxruntime-NODE accepts
+  it. Working combo is `{encoder_model: "q8", decoder_model_merged: "q4"}` —
+  must match fetch-model.mjs's file list. scripts/test-asr-model.mjs proves
+  the local file set loads/runs (node only; cannot catch wasm-only errors).
+- Gemini coach model id lives in `MODEL` in aiCoach.js — retired models 404
+  for new keys; bump when the error says so.
 
 ## Deployment
 

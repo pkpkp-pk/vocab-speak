@@ -19,6 +19,12 @@ import { pipeline, env } from "@huggingface/transformers";
 const MODEL_ID = "onnx-community/moonshine-base-ONNX";
 const SAMPLE_RATE = 16000;
 
+// int8 ("quantized") decoder is broken in onnxruntime-WEB (wasm):
+// TransposeDQWeightsForMatMulNBits "Missing required scale" on
+// embed_tokens — even though onnxruntime-node accepts the same file. The q4
+// decoder uses MatMulNBits with embedded scales, which wasm supports.
+const DTYPE = { encoder_model: "q8", decoder_model_merged: "q4" };
+
 env.localModelPath = "/models/";
 env.allowLocalModels = true;
 
@@ -41,7 +47,7 @@ function makeProgressCallback() {
 
 function loadTranscriber() {
   transcriberPromise ??= pipeline("automatic-speech-recognition", MODEL_ID, {
-    dtype: "q8",
+    dtype: DTYPE,
     progress_callback: makeProgressCallback(),
   });
   return transcriberPromise;
