@@ -2,9 +2,10 @@ import { useState } from "react";
 import Modal from "./Modal.jsx";
 import "./AISettingsModal.css";
 
-export default function AISettingsModal({ open, onClose, apiKey, geminiKey, onSave }) {
+export default function AISettingsModal({ open, onClose, apiKey, geminiKey, geminiLive, onSave }) {
   const [draft, setDraft] = useState(apiKey || "");
   const [geminiDraft, setGeminiDraft] = useState(geminiKey || "");
+  const [liveDraft, setLiveDraft] = useState(geminiLive ?? true);
 
   return (
     <Modal open={open} onClose={onClose}>
@@ -39,6 +40,15 @@ export default function AISettingsModal({ open, onClose, apiKey, geminiKey, onSa
         placeholder="AIza..."
         className="input ai-key-input"
       />
+      <label className="ai-live-toggle">
+        <input
+          type="checkbox"
+          checked={liveDraft}
+          onChange={(e) => setLiveDraft(e.target.checked)}
+        />
+        Use Gemini for live transcription during sessions (streams mic audio to
+        Google; off = Chrome's built-in recognizer)
+      </label>
 
       <div className="modal-actions">
         <button
@@ -52,7 +62,7 @@ export default function AISettingsModal({ open, onClose, apiKey, geminiKey, onSa
           Clear both
         </button>
         <button
-          onClick={() => onSave({ apiKey: draft, geminiKey: geminiDraft })}
+          onClick={() => onSave({ apiKey: draft, geminiKey: geminiDraft, geminiLive: liveDraft })}
           className="btn-amber"
         >
           Save

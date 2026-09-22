@@ -50,6 +50,7 @@ export default function App() {
   const [aiMode, setAiMode] = useLocalStorage("speakstage.aiMode", false, (v) => typeof v === "boolean");
   const [apiKey, setApiKey] = useLocalStorage("speakstage.apiKey", "", (v) => typeof v === "string");
   const [geminiKey, setGeminiKey] = useLocalStorage("speakstage.geminiKey", "", (v) => typeof v === "string");
+  const [geminiLive, setGeminiLive] = useLocalStorage("speakstage.geminiLive", true, (v) => typeof v === "boolean");
   const [customTopics, setCustomTopics] = useLocalStorage("speakstage.customTopics", [], Array.isArray);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [customModalOpen, setCustomModalOpen] = useState(false);
@@ -303,7 +304,7 @@ export default function App() {
             targetSeconds={targetSeconds}
             onFinish={finishSession}
             onExit={() => setStage("select")}
-            geminiKey={geminiKey}
+            geminiKey={geminiLive ? geminiKey : ""}
           />
         )}
 
@@ -329,10 +330,12 @@ export default function App() {
         open={settingsOpen}
         apiKey={apiKey}
         geminiKey={geminiKey}
+        geminiLive={geminiLive}
         onClose={() => setSettingsOpen(false)}
-        onSave={({ apiKey: newKey, geminiKey: newGeminiKey }) => {
+        onSave={({ apiKey: newKey, geminiKey: newGeminiKey, geminiLive: newGeminiLive }) => {
           setApiKey(newKey);
           setGeminiKey(newGeminiKey);
+          setGeminiLive(newGeminiLive);
           if (!newKey) setAiMode(false);
           setSettingsOpen(false);
         }}

@@ -34,6 +34,8 @@ function friendlySpeechError(code) {
       return "Couldn't reach Gemini — check the key in settings and your connection.";
     case "connection-lost":
       return "Gemini live connection dropped — retry.";
+    case "no-response":
+      return "Gemini live sent no transcript — check the key, or turn off Gemini transcription in settings to use Chrome.";
     default:
       return `Transcription error: ${code}.`;
   }

@@ -22,8 +22,12 @@ export function useGeminiLive(apiKey) {
   const t0Ref = useRef(0);
   const finalRef = useRef("");
   const interimRef = useRef(""); // text of the utterance currently streaming
+  const gotTextRef = useRef(false);
+  const watchdogRef = useRef(null);
 
   const stop = useCallback(() => {
+    clearTimeout(watchdogRef.current);
+    watchdogRef.current = null;
     sessionRef.current?.close();
     sessionRef.current = null;
     nodeRef.current?.disconnect();
@@ -51,6 +55,9 @@ export function useGeminiLive(apiKey) {
       const session = createLiveSession({
         apiKey,
         onText: (text) => {
+          gotTextRef.current = true;
+          clearTimeout(watchdogRef.current);
+          watchdogRef.current = null;
           // Chunks arrive cumulative-per-utterance in some builds, delta in
           // others — replace when cumulative, append otherwise.
           const prev = interimRef.current;
@@ -75,6 +82,17 @@ export function useGeminiLive(apiKey) {
         },
       });
       sessionRef.current = session;
+
+      // A dead-but-quiet session (bad key, rejected setup, protocol drift)
+      // must not look like "listening…" forever — fail loud after 10s.
+      gotTextRef.current = false;
+      clearTimeout(watchdogRef.current);
+      watchdogRef.current = setTimeout(() => {
+        if (!gotTextRef.current) {
+          setError("no-response");
+          setListening(false);
+        }
+      }, 10000);
 
       (async () => {
         try {
