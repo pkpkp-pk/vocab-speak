@@ -10,6 +10,7 @@ import { useLocalStorage } from "./hooks/useLocalStorage.js";
 import { getRandomTopic, TOPICS, DIFFICULTIES } from "./data/topics.js";
 import { generateAITopic } from "./lib/aiTopics.js";
 import { analyzeSpeech } from "./lib/analyzeSpeech.js";
+import { analyzeVocabulary } from "./lib/analyzeVocabulary.js";
 import { analyzeAudio } from "./lib/analyzeAudio.js";
 import { alignTranscript } from "./lib/alignTranscript.js";
 import "./App.css";
@@ -48,6 +49,7 @@ export default function App() {
 
   const [aiMode, setAiMode] = useLocalStorage("speakstage.aiMode", false, (v) => typeof v === "boolean");
   const [apiKey, setApiKey] = useLocalStorage("speakstage.apiKey", "", (v) => typeof v === "string");
+  const [geminiKey, setGeminiKey] = useLocalStorage("speakstage.geminiKey", "", (v) => typeof v === "string");
   const [customTopics, setCustomTopics] = useLocalStorage("speakstage.customTopics", [], Array.isArray);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [customModalOpen, setCustomModalOpen] = useState(false);
@@ -163,6 +165,50 @@ export default function App() {
     pickTopic({ difficulty: id });
   };
 
+  // Swap Chrome's transcript for the on-device (Moonshine) one: recompute
+  // text stats and re-align the heatmap with the worker's chunk segments.
+  // The self-calibrating lag lands near 0 here — these timestamps are real.
+  const applyOnDeviceTranscript = (text, segments) => {
+    setSessionResult((prev) => {
+      if (!prev) return prev;
+      const result = {
+        ...prev.result,
+        transcript: text,
+        speechSegments: segments,
+        usedOnDeviceTranscript: true,
+      };
+      // No strippedFillers: the on-device transcript contains them directly.
+      const stats = analyzeSpeech(text, {
+        durationSeconds: result.durationSeconds,
+        keywords: topic.keywords,
+      });
+      stats.vocab = analyzeVocabulary(text, {
+        segments,
+        keywords: topic.keywords,
+        durationSeconds: result.durationSeconds,
+      });
+      stats.audio = prev.stats.audio;
+      stats.annotated = alignTranscript(segments, result.audioSamples, result.micFloorDb);
+      return { result, stats };
+    });
+  };
+
+  // When deep pronunciation analysis produces CTC word spans, upgrade the
+  // heatmap from estimated to measured per-word timings.
+  const applyWordSpans = (words) => {
+    setSessionResult((prev) => {
+      if (!prev) return prev;
+      const stats = { ...prev.stats };
+      stats.annotated = alignTranscript(
+        prev.result.speechSegments,
+        prev.result.audioSamples,
+        prev.result.micFloorDb,
+        words
+      );
+      return { ...prev, stats };
+    });
+  };
+
   const addCustomTopic = (t) => setCustomTopics((prev) => [...prev, t]);
   const deleteCustomTopic = (id) => setCustomTopics((prev) => prev.filter((t) => t.id !== id));
 
@@ -174,11 +220,19 @@ export default function App() {
       strippedFillers: result.strippedFillers,
     });
     // Waveform metrics (pauses/volume/pitch) — null when the mic was denied
-    // or too little speech was captured.
-    stats.audio = analyzeAudio(result.audioSamples);
+    // or too little speech was captured. result.micFloorDb is the measured
+    // noise floor when the mic check ran, null otherwise (adaptive fallback).
+    stats.audio = analyzeAudio(result.audioSamples, result.micFloorDb);
+    // Word-choice stats: diversity, overuse, keyword timing — null on empty
+    // transcript.
+    stats.vocab = analyzeVocabulary(result.transcript, {
+      segments: result.speechSegments,
+      keywords: topic.keywords,
+      durationSeconds: result.durationSeconds,
+    });
     // Transcript words aligned onto the waveform (per-word volume, pause
     // markers, untranscribed-sound count) — null when either side is missing.
-    stats.annotated = alignTranscript(result.speechSegments, result.audioSamples);
+    stats.annotated = alignTranscript(result.speechSegments, result.audioSamples, result.micFloorDb);
     setSessionResult({ result, stats });
 
     const today = dateKey();
@@ -262,6 +316,10 @@ export default function App() {
               pickTopic();
               setStage("select");
             }}
+            geminiKey={geminiKey}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onApplyTranscript={applyOnDeviceTranscript}
+            onWordSpans={applyWordSpans}
           />
         )}
       </div>
@@ -269,10 +327,12 @@ export default function App() {
       <AISettingsModal
         open={settingsOpen}
         apiKey={apiKey}
+        geminiKey={geminiKey}
         onClose={() => setSettingsOpen(false)}
-        onSave={(key) => {
-          setApiKey(key);
-          if (!key) setAiMode(false);
+        onSave={({ apiKey: newKey, geminiKey: newGeminiKey }) => {
+          setApiKey(newKey);
+          setGeminiKey(newGeminiKey);
+          if (!newKey) setAiMode(false);
           setSettingsOpen(false);
         }}
       />
@@ -286,7 +346,8 @@ export default function App() {
       />
 
       <footer className="app-footer">
-        Built for daily fluency practice — your voice never leaves your browser unless AI mode is on.
+        Built for daily fluency practice — waveform analysis stays in your browser;
+        live transcription and AI features send audio/text to their respective APIs.
       </footer>
     </div>
   );

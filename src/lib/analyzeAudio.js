@@ -28,17 +28,39 @@ function percentile(sorted, p) {
 
 // Boolean per-sample speech/silence mask, adaptive to the recording's noise
 // floor. Exported for alignTranscript.js as well as used internally.
-export function voicedMask(samples) {
+// floorDb: optional MEASURED noise floor from the pre-session mic check. The
+// adaptive fallback (10th percentile) assumes >=10% near-noise samples — a
+// fluent nonstop talker violates that, the threshold inflates into quiet
+// speech, and sentence tails / soft "um"s get eaten. A measured floor has no
+// such bias.
+export function voicedMask(samples, floorDb = null) {
   const levels = samples.map((s) => s.rmsDb);
-  const sorted = [...levels].sort((a, b) => a - b);
-  const threshold = Math.max(percentile(sorted, 0.1) + FLOOR_MARGIN_DB, -55);
+  const base = floorDb ?? percentile([...levels].sort((a, b) => a - b), 0.1);
+  const threshold = Math.max(base + FLOOR_MARGIN_DB, -55);
   return levels.map((l) => l >= threshold);
 }
 
-export function analyzeAudio(samples) {
+// Contiguous voiced time regions from the mask. Shared by alignTranscript
+// (heatmap alignment) and asrChunks (on-device ASR chunk planning).
+export function voicedRegions(samples, floorDb = null) {
+  const mask = voicedMask(samples, floorDb);
+  const regions = [];
+  let start = null;
+  for (let i = 0; i < samples.length; i++) {
+    if (mask[i] && start === null) start = samples[i].t;
+    if (!mask[i] && start !== null) {
+      regions.push({ start, end: samples[i].t });
+      start = null;
+    }
+  }
+  if (start !== null) regions.push({ start, end: samples[samples.length - 1].t });
+  return regions;
+}
+
+export function analyzeAudio(samples, floorDb = null) {
   if (!samples || samples.length < 20) return null;
 
-  const voiced = voicedMask(samples);
+  const voiced = voicedMask(samples, floorDb);
 
   // Clip analysis to the region actually containing speech.
   let first = voiced.indexOf(true);

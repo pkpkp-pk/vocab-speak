@@ -1,5 +1,6 @@
-// Words that are essentially always fillers.
-const FILLER_WORDS = [
+// Words that are essentially always fillers. Exported for analyzeVocabulary
+// (content-word overuse excludes them).
+export const FILLER_WORDS = [
   // Disfluencies — Chrome's recognizer usually strips these from final
   // transcripts (they're recovered from interims, see diffStrippedFillers),
   // but whenever one does survive in the text it's counted directly.
@@ -39,8 +40,9 @@ function countAll(clean, words) {
   return { counts, total };
 }
 
-// Words of `text` normalized for comparison: lowercased, punctuation stripped.
-function tokensOf(text) {
+// Words of `text` normalized for comparison: lowercased, punctuation
+// stripped. Exported for analyzeVocabulary.
+export function tokensOf(text) {
   return (text ?? "")
     .toLowerCase()
     .replace(/[^a-z\s]/g, " ")

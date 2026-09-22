@@ -13,11 +13,13 @@
 
 import { AutoProcessor, AutoModelForCTC, AutoTokenizer, env } from "@huggingface/transformers";
 import {
-  forcedAlign,
+  alignStates,
+  charScoresFromStates,
   greedyDecode,
   logitsToLogProbs,
   scoreWords,
   textToTargets,
+  wordSpansFromStates,
 } from "./forcedAlign.js";
 
 const MODEL_ID = "Xenova/wav2vec2-base-960h";
@@ -135,11 +137,19 @@ async function runInference(audio, transcript) {
   }
   if (!fittedWords.length) return { words: [], decodedTranscript, note: "audio too short" };
 
-  const charScores = forcedAlign(all, totalFrames, V, fittedIds);
-  if (!charScores) return { words: [], decodedTranscript, note: "alignment failed" };
+  // One alignment pass feeds both scores and per-word time spans (20ms
+  // resolution) — the heatmap upgrades to measured word timings from these.
+  const states = alignStates(all, totalFrames, V, fittedIds);
+  if (!states) return { words: [], decodedTranscript, note: "alignment failed" };
+  const charScores = charScoresFromStates(all, totalFrames, V, fittedIds, states);
+  const spans = wordSpansFromStates(states, fittedWords);
 
   return {
-    words: scoreWords(charScores, fittedWords),
+    words: scoreWords(charScores, fittedWords).map((w, i) => ({
+      ...w,
+      start: spans[i].start,
+      end: spans[i].end,
+    })),
     decodedTranscript,
     truncated: fittedWords.length < words.length,
   };

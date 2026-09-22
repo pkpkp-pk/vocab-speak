@@ -114,6 +114,16 @@
   color: rgba(201, 195, 180, 0.6);
 }
 
+.vocab-panel {
+  padding: 1rem 1.25rem;
+}
+.vocab-line {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--chalk);
+}
+
 .audio-panel {
   padding: 1rem 1.25rem;
 }

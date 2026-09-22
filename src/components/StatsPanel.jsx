@@ -1,6 +1,8 @@
 import { formatDuration } from "../lib/analyzeSpeech.js";
 import { useLocalStorage } from "../hooks/useLocalStorage.js";
 import PronunciationPanel from "./PronunciationPanel.jsx";
+import CoachPanel from "./CoachPanel.jsx";
+import AsrPanel from "./AsrPanel.jsx";
 import TranscriptHeatmap from "./TranscriptHeatmap.jsx";
 import "./StatsPanel.css";
 
@@ -42,7 +44,7 @@ function VolumeSpark({ spark, sparkPauses }) {
   );
 }
 
-export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic }) {
+export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic, geminiKey, onOpenSettings, onApplyTranscript, onWordSpans }) {
   const hasTranscript = result.transcript?.trim().length > 0;
   const a = stats.audio;
   // Short voiced regions in the waveform that no transcript words landed on.
@@ -147,9 +149,34 @@ export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic }
             </span>
           </div>
           {deepAnalysis && (
-            <PronunciationPanel audioBlob={result.audioBlob} transcript={result.transcript} />
+            <PronunciationPanel
+              audioBlob={result.audioBlob}
+              transcript={result.transcript}
+              onWordSpans={onWordSpans}
+            />
           )}
         </>
+      )}
+
+      {result.audioBlob && (
+        <CoachPanel
+          audioBlob={result.audioBlob}
+          topic={topic}
+          transcript={result.transcript}
+          stats={stats}
+          geminiKey={geminiKey}
+          onOpenSettings={onOpenSettings}
+        />
+      )}
+
+      {result.audioBlob && (
+        <AsrPanel
+          audioBlob={result.audioBlob}
+          audioSamples={result.audioSamples}
+          micFloorDb={result.micFloorDb ?? null}
+          chromeFillerTotal={stats.fillerTotal}
+          onApply={onApplyTranscript}
+        />
       )}
 
       {hasTranscript &&
@@ -189,9 +216,44 @@ export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic }
         </div>
       )}
 
+      {hasTranscript && stats.vocab && (
+        <div className="card card-dim vocab-panel">
+          <p className="label-xs filler-label">vocabulary</p>
+          <p className="vocab-line">
+            {stats.vocab.uniqueCount} unique of {stats.vocab.wordCount} words ·{" "}
+            {stats.vocab.diversityLabel} ({stats.vocab.matr ?? stats.vocab.ttr}
+            {stats.vocab.matr == null ? ", estimate" : ""})
+          </p>
+          {stats.vocab.overused.length > 0 && (
+            <>
+              <div className="filler-chips">
+                {stats.vocab.overused.map((o) => (
+                  <span key={o.word} className="chip">
+                    "{o.word}" ×{o.count}
+                  </span>
+                ))}
+              </div>
+              <p className="filler-maybe">
+                you said "{stats.vocab.overused[0].word}" {stats.vocab.overused[0].count} times —
+                try a synonym next round
+              </p>
+            </>
+          )}
+          {stats.vocab.plannerLabel && (
+            <p className="filler-maybe">
+              keyword timing: {stats.vocab.plannerLabel} (
+              {stats.vocab.kwTiming.map((k) => `${k.keyword} ${Math.round(k.at * 100)}%`).join(", ")}
+              through the session)
+            </p>
+          )}
+        </div>
+      )}
+
       {hasTranscript && stats.annotated ? (
         <div className="card card-dim stats-transcript">
-          <p className="label-xs filler-label">transcript · volume per word</p>
+          <p className="label-xs filler-label">
+            transcript · volume per word{result.usedOnDeviceTranscript ? " · on-device" : ""}
+          </p>
           <TranscriptHeatmap tokens={stats.annotated.tokens} />
           <p className="th-legend">
             <span className="th-legend-swatch" /> stronger highlight = louder ·{" "}

@@ -1,4 +1,4 @@
-# Speak Stage — Vocabulary & Spontaneous Speaking Trainer
+# Vocab Speak — Vocabulary & Spontaneous Speaking Trainer
 
 A React + Vite app for practicing spontaneous
 English speaking. Styled with plain per-component CSS (design tokens live as
@@ -48,7 +48,19 @@ output `dist`). The build fetches the model files and bundles them into
   "Stuck? Get a few words" to reveal keywords a few at a time — not the
   whole list at once, so it stays a nudge rather than a script.
 - **Live transcription** — uses the browser's built-in `SpeechRecognition`
-  API, entirely client-side, no server or API key needed for this part.
+  API, no key needed for this part (audio goes to Google's speech service).
+- **On-device re-transcription** (optional) — a Moonshine ASR model running
+  in a Web Worker re-transcribes the recording after the session: it hears
+  the "um"/"uh" Chrome drops, works offline, and gives Firefox/Safari a
+  transcript at all. Chunked at silence boundaries; ~63 MB model served from
+  the app's own origin. Applying it recomputes every transcript stat.
+- **Mic check** — optional 4-second pre-session check measures your noise
+  floor (feeding the pause/voicing detectors — fluent nonstop talkers
+  otherwise get undercounted), catches dead or clipping mics, and settles
+  the mic permission before recognition starts.
+- **Vocabulary analysis** — unique-word ratio with MATR diversity estimate,
+  content-word overuse ("you said 'networking' ×9"), and keyword timing
+  (early planner / spread out / late scrambler).
 - **Stats** — word count, words-per-minute, filler-word count/breakdown
   (um, uh, like, you know, etc.), and how many hint keywords you actually
   used, computed in `src/lib/analyzeSpeech.js`. Chrome's recognizer silently
@@ -67,6 +79,12 @@ output `dist`). The build fetches the model files and bundles them into
   (`src/lib/pronunciation.worker.js`, `src/lib/forcedAlign.js`). Runs fully
   on-device; no API key. The ~91 MB quantized model is served from the app's
   own origin (see below) and cached by the browser after the first run.
+- **AI coach** (optional, bring-your-own Gemini key) — sends the session
+  recording (WAV, first 90 s) to Google's Gemini API for the feedback local
+  metrics can't give: fillers heard by ear, pronunciation tips, grammar fixes,
+  vocabulary upgrades, and a fluency score (`src/lib/aiCoach.js`,
+  `src/components/CoachPanel.jsx`). Nothing is sent until you click the
+  button; the key lives only in your browser's local storage.
 - **AI bonus mode** (optional) — toggle "AI mode" in the header and paste
   your own Anthropic API key (gear icon) to generate fresh topics and
   keyword sets on demand instead of pulling from the local list. The key

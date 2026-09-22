@@ -21,7 +21,7 @@ function progressLabel(p) {
   return "preparing…";
 }
 
-export default function PronunciationPanel({ audioBlob, transcript }) {
+export default function PronunciationPanel({ audioBlob, transcript, onWordSpans }) {
   const [state, setState] = useState("idle"); // idle | busy | done | error
   const [progress, setProgress] = useState({ stage: "load", progress: 0 });
   const [result, setResult] = useState(null);
@@ -39,6 +39,8 @@ export default function PronunciationPanel({ audioBlob, transcript }) {
       );
       setResult(res);
       setState("done");
+      // Measured per-word timings upgrade the transcript heatmap in place.
+      if (res.words?.some((w) => w.start != null)) onWordSpans?.(res.words);
     } catch (err) {
       setError(err.message);
       setState("error");
@@ -57,6 +59,13 @@ export default function PronunciationPanel({ audioBlob, transcript }) {
             Score each word with a speech model running entirely on your device.
             First run downloads ~95&nbsp;MB (cached afterwards); only the first{" "}
             {MAX_ANALYZED_SECONDS}s are analyzed.
+            {typeof caches === "undefined" && (
+              <>
+                {" "}
+                ⚠ This origin can't cache (needs localhost or HTTPS) — the model will
+                re-download on every visit.
+              </>
+            )}
           </p>
           <button onClick={run} className="btn-ghost pron-run">
             🔬 Analyze my pronunciation

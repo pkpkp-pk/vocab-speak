@@ -4,9 +4,9 @@ export default function Header({ aiMode, onToggleAI, onOpenSettings, onOpenCusto
   return (
     <header className="site-header">
       <div className="logo">
-        <div className="logo-mark">S</div>
+        <div className="logo-mark">V</div>
         <div className="logo-text">
-          <p className="logo-name">Speak Stage</p>
+          <p className="logo-name">Vocab Speak</p>
           <p className="logo-sub">spontaneous speaking practice</p>
         </div>
       </div>

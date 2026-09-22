@@ -55,11 +55,12 @@ export function logitsToLogProbs(logits, T, V) {
   return out;
 }
 
-// Viterbi forced alignment of targetIds against log-probs (T frames x V vocab).
-// Standard CTC trellis over the blank-extended target sequence. Returns a
-// per-target-character posterior score array (aligned 1:1 with targetIds),
-// or null when the target cannot fit the audio (T < extended length).
-export function forcedAlign(logProbs, T, V, targetIds) {
+// Viterbi forced alignment of targetIds against log-probs (T frames x V
+// vocab): the trellis + backtrace, returning the per-frame state assignment.
+// Kept separate from scoring so callers can derive both char scores AND word
+// time spans from one alignment. Returns null when the target cannot fit the
+// audio (T < extended length).
+export function alignStates(logProbs, T, V, targetIds) {
   const S = targetIds.length;
   if (S === 0) return null;
 
@@ -108,9 +109,14 @@ export function forcedAlign(logProbs, T, V, targetIds) {
     states[t] = s;
     s -= back[t * E + s];
   }
+  return states;
+}
 
-  // Per-character score: geometric mean of the token's posterior over the
-  // frames it was aligned to (equivalently exp of mean log-prob).
+// Per-character posterior scores from a state assignment: geometric mean of
+// the token's posterior over the frames it was aligned to (equivalently exp
+// of mean log-prob). Aligned 1:1 with targetIds.
+export function charScoresFromStates(logProbs, T, V, targetIds, states) {
+  const S = targetIds.length;
   const charScores = new Float64Array(S);
   for (let i = 0; i < S; i++) {
     const stateIdx = 2 * i + 1;
@@ -126,6 +132,38 @@ export function forcedAlign(logProbs, T, V, targetIds) {
     charScores[i] = count ? Math.exp(sumLp / count) : 0;
   }
   return charScores;
+}
+
+// The classic one-call form: alignment folded straight into char scores.
+export function forcedAlign(logProbs, T, V, targetIds) {
+  const states = alignStates(logProbs, T, V, targetIds);
+  return states ? charScoresFromStates(logProbs, T, V, targetIds, states) : null;
+}
+
+// Per-word time spans from a state assignment. wav2vec2 emits one frame per
+// 20ms (stride 320 @ 16 kHz), so word boundaries land at ~20-60ms accuracy —
+// versus the ~700ms recognition-lag guess used when no model runs.
+// words: [{ word, from, to }] from textToTargets (char ranges into targetIds).
+// Words whose chars got zero frames (fast mumbles) come back with null
+// start/end — the caller interpolates them.
+export function wordSpansFromStates(states, words, frameS = 0.02) {
+  const MIN_FRAMES = 2; // clamp zero-width mumbles to 40ms
+  return words.map(({ word, from, to }) => {
+    const sFirst = 2 * from + 1;
+    const sLast = 2 * (to - 1) + 1;
+    let first = -1;
+    let last = -1;
+    for (let t = 0; t < states.length; t++) {
+      const st = states[t];
+      if (st >= sFirst && st <= sLast && st % 2 === 1) {
+        if (first === -1) first = t;
+        last = t;
+      }
+    }
+    if (first === -1) return { word, start: null, end: null };
+    const end = Math.max(last + 1, first + MIN_FRAMES);
+    return { word, start: +(first * frameS).toFixed(2), end: +(end * frameS).toFixed(2) };
+  });
 }
 
 // Fold per-character scores into per-word scores (geometric mean of chars).

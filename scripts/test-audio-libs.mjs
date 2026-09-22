@@ -1,14 +1,24 @@
 // Sanity tests for the pure analysis modules (run with: node scripts/test-audio-libs.mjs)
-import { analyzeAudio } from "../src/lib/analyzeAudio.js";
+import { analyzeAudio, voicedRegions } from "../src/lib/analyzeAudio.js";
+import { planChunks } from "../src/lib/asrChunks.js";
 import { analyzeSpeech, diffStrippedFillers } from "../src/lib/analyzeSpeech.js";
+import { analyzeVocabulary } from "../src/lib/analyzeVocabulary.js";
+import { encodeWavPcm16 } from "../src/lib/wav.js";
+import { buildCoachPrompt } from "../src/lib/aiCoach.js";
+import { createServer } from "vite";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { fileURLToPath } from "node:url";
 import { alignTranscript } from "../src/lib/alignTranscript.js";
 import { detectPitch } from "../src/lib/pitch.js";
 import {
+  alignStates,
   forcedAlign,
   greedyDecode,
   logitsToLogProbs,
   scoreWords,
   textToTargets,
+  wordSpansFromStates,
 } from "../src/lib/forcedAlign.js";
 
 let failures = 0;
@@ -117,6 +127,9 @@ const tokens = aligned?.tokens;
 check("alignTranscript returns tokens", Array.isArray(tokens) && tokens.length > 0);
 check("no leftover sounds when every region has words", aligned?.leftoverCount === 0,
   `got ${aligned?.leftoverCount}`);
+check("lag self-calibrates (fixture implied 0.6/0.5 → median 0.55)",
+  aligned?.lagCalibrated === true && Math.abs(aligned.lagSeconds - 0.55) < 0.01,
+  `got ${aligned?.lagSeconds} calibrated=${aligned?.lagCalibrated}`);
 const heatWords = tokens?.filter((t) => t.type === "word") ?? [];
 const heatPauses = tokens?.filter((t) => t.type === "pause") ?? [];
 check("all 5 words placed", heatWords.length === 5, `got ${heatWords.length}`);
@@ -170,10 +183,258 @@ check("leftover: duration ≈0.4s", loAligned && Math.abs(loAligned.leftoverSeco
 check("leftover: words still placed on their regions",
   loAligned && loAligned.tokens.filter((tk) => tk.type === "word").length === 5,
   `got ${loAligned?.tokens.filter((tk) => tk.type === "word").length}`);
+const loPauses = loAligned?.tokens.filter((tk) => tk.type === "pause") ?? [];
+check("pause gap subtracts the skipped untranscribed region (2.0 - 0.4 ≈ 1.6s)",
+  loPauses.length === 1 && Math.abs(loPauses[0].dur - 1.6) < 0.15,
+  `got ${loPauses[0]?.dur}s`);
 // A long unassigned region (a missed phrase) must not count as a filler.
 const loBig = alignTranscript([{ text: "hello there friend", endedAt: 8.6 }], loSamples);
 check("long unassigned region is not a leftover", loBig?.leftoverCount === 1,
   `got ${loBig?.leftoverCount}`);
+
+// ---- lag calibration: true lag 1.2s (slow network), regions 1-2s and 4-5s ----
+const calSamples = [];
+for (let i = 0; i < 6 * 60; i++) {
+  const t = i / 60;
+  const voiced = (t >= 1 && t < 2) || (t >= 4 && t < 5);
+  calSamples.push({ t, rmsDb: voiced ? (t < 3 ? -22 : -15) : -62, f0: null });
+}
+const calAligned = alignTranscript(
+  [{ text: "hello there", endedAt: 3.2 }, { text: "louder now friend", endedAt: 6.2 }],
+  calSamples
+);
+check("calibrates to true lag 1.2s",
+  calAligned?.lagCalibrated === true && Math.abs(calAligned.lagSeconds - 1.2) < 0.05,
+  `got ${calAligned?.lagSeconds}`);
+const calWords = calAligned?.tokens.filter((t) => t.type === "word") ?? [];
+check("calibrated walk still lands words on correct regions",
+  calWords.length === 5 && calWords.slice(0, 2).every((w) => Math.abs(w.db - -22) < 1.5) &&
+  calWords.slice(2).every((w) => Math.abs(w.db - -15) < 1.5),
+  `got ${JSON.stringify(calWords.map((w) => w.db))}`);
+const calSingle = alignTranscript([{ text: "hello there", endedAt: 3.2 }], calSamples);
+check("single segment falls back to default lag, uncalibrated",
+  calSingle?.lagCalibrated === false && calSingle?.lagSeconds === 0.7,
+  `got ${calSingle?.lagSeconds} calibrated=${calSingle?.lagCalibrated}`);
+
+// ---- measured noise floor vs adaptive (fluent nonstop-talker bias) ----
+// 10s at 60fps: per 2s cycle → 1.2s loud (-20), 0.7s quiet tail (-32),
+// 0.1s silence (-50). Silence is only 5% of samples, so the adaptive p10
+// floor lands inside the quiet speech and eats it; a measured floor doesn't.
+const ntSamples = [];
+for (let c = 0; c < 5; c++) {
+  const base = c * 2;
+  for (let i = 0; i < 72; i++) ntSamples.push({ t: base + i / 60, rmsDb: -20, f0: 120 });
+  for (let i = 0; i < 42; i++) ntSamples.push({ t: base + 1.2 + i / 60, rmsDb: -32, f0: 120 });
+  for (let i = 0; i < 6; i++) ntSamples.push({ t: base + 1.9 + i / 60, rmsDb: -50, f0: null });
+}
+const ntAdaptive = analyzeAudio(ntSamples);
+const ntMeasured = analyzeAudio(ntSamples, -50);
+check("adaptive floor eats quiet tails (false pauses for fluent talker)",
+  ntAdaptive.pauseCount >= 3, `adaptive pauses ${ntAdaptive.pauseCount}`);
+check("measured floor keeps quiet speech voiced (no false pauses)",
+  ntMeasured.pauseCount === 0 && ntMeasured.voicedSeconds > ntAdaptive.voicedSeconds + 2,
+  `measured pauses ${ntMeasured.pauseCount}, voiced ${ntMeasured.voicedSeconds}s vs adaptive ${ntAdaptive.voicedSeconds}s`);
+
+// ---- voicedRegions + planChunks (on-device ASR chunk planning) ----
+// Voiced 1-3s, 5-6s, 30-35s over 36s of samples.
+const chunkSamples = [];
+for (let i = 0; i < 36 * 60; i++) {
+  const t = i / 60;
+  const voiced = (t >= 1 && t < 3) || (t >= 5 && t < 6) || (t >= 30 && t < 35);
+  chunkSamples.push({ t, rmsDb: voiced ? -20 : -62, f0: null });
+}
+const regions = voicedRegions(chunkSamples);
+check("voicedRegions finds 3 regions", regions.length === 3,
+  `got ${regions.length}`);
+check("voicedRegions boundaries ≈ [1,3] [5,6] [30,35]",
+  Math.abs(regions[0].start - 1) < 0.1 && Math.abs(regions[0].end - 3) < 0.1 &&
+  Math.abs(regions[2].start - 30) < 0.1 && Math.abs(regions[2].end - 35) < 0.1,
+  JSON.stringify(regions.map((r) => [+r.start.toFixed(1), +r.end.toFixed(1)])));
+const planned = planChunks(chunkSamples);
+check("planChunks groups close regions, splits far ones",
+  planned.length === 2, JSON.stringify(planned));
+check("planChunks pads but clamps inside the audio",
+  planned[0].start >= 0 && planned[0].start <= 1 && planned[1].end <= 36 && planned[1].end >= 35,
+  JSON.stringify(planned));
+check("planChunks never cuts inside a voiced region",
+  planned.every((c) =>
+    regions.every((r) => (c.start <= r.start - 0.01 || c.start >= r.end - 0.01) &&
+                          (c.end >= r.end + 0.01 - 0.4 || c.end <= r.start + 0.01))
+  ));
+// One 60s nonstop region hard-splits into <=25s pieces. Uses the measured
+// floor (-60): with no silence in the signal at all, the adaptive p10 floor
+// inflates above the signal and finds nothing — exactly the fluent-talker
+// bias the mic check fixes.
+const longSamples = [];
+for (let i = 0; i < 60 * 60; i++) {
+  longSamples.push({ t: i / 60, rmsDb: -20, f0: null });
+}
+const longPlanned = planChunks(longSamples, { floorDb: -60 });
+check("nonstop region hard-splits into <=25s chunks",
+  longPlanned.length === 3 && longPlanned.every((c) => c.end - c.start <= 25.5),
+  JSON.stringify(longPlanned.map((c) => +(c.end - c.start).toFixed(1))));
+check("planChunks empty on silence", planChunks(chunkSamples.map((s) => ({ ...s, rmsDb: -70 }))).length === 0);
+
+// ---- word spans from CTC states (20ms frames) ----
+// Existing HI fixture: H hot at frames 30-70, I at 90-120.
+const hiStates = alignStates(logProbs, T, V, ids);
+const hiSpans = wordSpansFromStates(hiStates, words);
+check("word span matches the hot frames (0.6s-2.4s)",
+  hiSpans.length === 1 && Math.abs(hiSpans[0].start - 0.6) < 0.03 && Math.abs(hiSpans[0].end - 2.4) < 0.03,
+  `got [${hiSpans[0]?.start}, ${hiSpans[0]?.end}]`);
+
+// Two words: H 20-40, I 40-60, | 60-70, H 70-90, I 90-110.
+const logits2 = new Float32Array(T * V).fill(-8);
+const setHot2 = (t0, t1, id, val = 6) => { for (let t = t0; t < t1; t++) logits2[t * V + id] = val; };
+setHot2(0, 20, 0); setHot2(20, 40, 11); setHot2(40, 60, 10); setHot2(60, 70, 4);
+setHot2(70, 90, 11); setHot2(90, 110, 10); setHot2(110, 120, 0);
+const lp2 = logitsToLogProbs(logits2, T, V);
+const { ids: ids2, words: words2 } = textToTargets("hi hi", vocab);
+const spans2 = wordSpansFromStates(alignStates(lp2, T, V, ids2), words2);
+check("two words get distinct spans",
+  spans2.length === 2 && Math.abs(spans2[0].start - 0.4) < 0.03 && Math.abs(spans2[0].end - 1.2) < 0.03 &&
+  Math.abs(spans2[1].start - 1.4) < 0.03 && Math.abs(spans2[1].end - 2.2) < 0.03,
+  JSON.stringify(spans2));
+
+// ---- alignTranscript wordSpans branch: measured timings, no lag ----
+const spSamples = [];
+for (let i = 0; i < 7 * 60; i++) {
+  const t = i / 60;
+  const voiced = (t >= 1 && t < 2) || (t >= 2.5 && t < 2.8) || (t >= 4 && t < 5);
+  spSamples.push({ t, rmsDb: voiced ? (t < 2.2 ? -22 : t < 3 ? -20 : -15) : -62, f0: null });
+}
+const spAligned = alignTranscript([], spSamples, null, [
+  { word: "hello", start: 1, end: 2 },
+  { word: "there", start: 4, end: 5 },
+]);
+const spTokens = spAligned?.tokens ?? [];
+check("spans branch: word-pause-word tokens",
+  spTokens.length === 3 && spTokens[0].type === "word" && spTokens[1].type === "pause" &&
+  Math.abs(spTokens[1].dur - 2.0) < 0.15 && spTokens[2].type === "word",
+  JSON.stringify(spTokens.map((t) => t.type)));
+check("spans branch: per-word volume from true windows",
+  Math.abs(spTokens[0].db - -22) < 1 && Math.abs(spTokens[2].db - -15) < 1,
+  `got [${spTokens[0]?.db}, ${spTokens[2]?.db}]`);
+check("spans branch: uncovered short region still counts as leftover",
+  spAligned?.leftoverCount === 1, `got ${spAligned?.leftoverCount}`);
+check("spans branch: lag is zero (measured)",
+  spAligned?.lagSeconds === 0 && spAligned?.lagCalibrated === true);
+const interpAligned = alignTranscript([], spSamples, null, [
+  { word: "a", start: 1, end: 2 },
+  { word: "mumble", start: null, end: null },
+  { word: "c", start: 4, end: 5 },
+]);
+const interpWords = interpAligned?.tokens.filter((t) => t.type === "word") ?? [];
+check("null spans interpolate between neighbours",
+  interpWords.length === 3 && interpWords[1].text === "mumble" && interpWords[1].db !== null);
+
+// ---- analyzeVocabulary: diversity, overuse, keyword timing ----
+const repText = Array.from({ length: 60 }, () => "networking is good networking is useful").join(" ");
+const repVocab = analyzeVocabulary(repText, { keywords: [], durationSeconds: 60 });
+check("repetitive text scores repetitive diversity",
+  repVocab.diversityLabel === "repetitive", `got ${repVocab.diversityLabel} (${repVocab.matr ?? repVocab.ttr})`);
+check("overuse catches repeated content word",
+  repVocab.overused.some((o) => o.word === "networking"),
+  JSON.stringify(repVocab.overused));
+// 240 unique alphabetic tokens (digits would be stripped by tokenization).
+const pair = (i) => String.fromCharCode(97 + (i % 26), 97 + Math.floor(i / 26));
+const richText = Array.from({ length: 240 }, (_, i) => pair(i)).join(" ");
+const richVocab = analyzeVocabulary(richText, { keywords: [], durationSeconds: 60 });
+check("varied text scores wide vocabulary",
+  richVocab.diversityLabel === "wide vocabulary" && richVocab.overused.length === 0,
+  `got ${richVocab.diversityLabel}, overused ${richVocab.overused.length}`);
+check("stopwords never count as overused",
+  analyzeVocabulary(Array(50).fill("the and but so").join(" "), {}).overused.length === 0);
+check("topic keywords excluded from overuse",
+  analyzeVocabulary(Array(40).fill("risk assessment risk").join(" "), { keywords: ["risk"] })
+    .overused.every((o) => o.word !== "risk"));
+const kwVocab = analyzeVocabulary("hello world", {
+  keywords: ["risk", "growth"],
+  durationSeconds: 60,
+  segments: [
+    { text: "risk first", endedAt: 6 },
+    { text: "growth later", endedAt: 54 },
+  ],
+});
+check("keyword timing: mean 50% → spread out",
+  kwVocab.kwTiming.length === 2 && kwVocab.plannerLabel === "spread out",
+  JSON.stringify(kwVocab));
+const earlyVocab = analyzeVocabulary("hello", {
+  keywords: ["risk", "growth"],
+  durationSeconds: 60,
+  segments: [{ text: "risk growth together", endedAt: 5 }],
+});
+check("keyword timing: both early → early planner", earlyVocab.plannerLabel === "early planner",
+  `got ${earlyVocab.plannerLabel}`);
+check("empty transcript → null", analyzeVocabulary("", {}) === null);
+
+// ---- heatmap markup: chip spans need real whitespace between them ----
+// Adjacent elements from .map() have no break opportunities, so the browser
+// treats the whole row as one unbreakable word and overflows the card.
+// Render the real component (through vite's SSR loader) and check the markup.
+{
+  const root = fileURLToPath(new URL("..", import.meta.url));
+  const server = await createServer({ root, logLevel: "silent", server: { middlewareMode: true } });
+  try {
+    const { default: TranscriptHeatmap } = await server.ssrLoadModule(
+      "/src/components/TranscriptHeatmap.jsx"
+    );
+    const html = renderToStaticMarkup(
+      createElement(TranscriptHeatmap, {
+        tokens: [
+          { type: "word", text: "hello", db: -20 },
+          { type: "word", text: "there", db: -18 },
+          { type: "pause", dur: 1.6 },
+          { type: "word", text: "friend", db: -15 },
+        ],
+      })
+    );
+    check("heatmap chips separated by whitespace (line can wrap inside the card)",
+      !html.includes("</span><span"), html.replace(/\s+/g, " ").slice(0, 140));
+    check("heatmap renders words and pause pill",
+      html.includes("hello") && html.includes("friend") && html.includes("1.6"));
+  } finally {
+    await server.close();
+  }
+}
+
+// ---- wav.js: 16-bit PCM WAV encoder for the Gemini coach upload ----
+const wav = encodeWavPcm16(new Float32Array([0, 0.5, -0.5, 1, -1]), 16000);
+const wavAscii = (off, n) => String.fromCharCode(...wav.slice(off, off + n));
+const wavView = new DataView(wav.buffer);
+check("wav header is RIFF/WAVE", wavAscii(0, 4) === "RIFF" && wavAscii(8, 4) === "WAVE");
+check("wav total size = 44-byte header + data", wav.length === 44 + 10);
+check("wav is mono 16-bit 16kHz PCM",
+  wavView.getUint16(20, true) === 1 && wavView.getUint16(22, true) === 1 &&
+  wavView.getUint16(34, true) === 16 && wavView.getUint32(24, true) === 16000);
+check("wav chunk sizes consistent",
+  wavView.getUint32(40, true) === 10 && wavView.getUint32(4, true) === 36 + 10);
+check("wav sample values roundtrip",
+  wavView.getInt16(46, true) === 16383 && wavView.getInt16(48, true) === -16384,
+  `got [${wavView.getInt16(46, true)}, ${wavView.getInt16(48, true)}]`);
+check("wav clamps out-of-range samples",
+  wavView.getInt16(50, true) === 32767 && wavView.getInt16(52, true) === -32768);
+
+// ---- aiCoach.js: coach prompt builder (pure) ----
+const coachPrompt = buildCoachPrompt({
+  topic: { title: "Networking", prompt: "Talk about it" },
+  transcript: "um hello there",
+  stats: {
+    wpm: 120,
+    audio: { pauseCount: 2, longestPause: 1.5, meanDb: -22, volumeLabel: "good", pitch: { label: "monotone" } },
+  },
+});
+check("coach prompt embeds measured stats and transcript",
+  coachPrompt.includes("120") && coachPrompt.includes("um hello there") && coachPrompt.includes("monotone"));
+check("coach prompt warns that the transcript drops fillers",
+  /DROPS filler/i.test(coachPrompt));
+const coachPromptBare = buildCoachPrompt({
+  topic: { title: "T", prompt: "P" },
+  transcript: "",
+  stats: { wpm: 0, audio: null },
+});
+check("coach prompt handles missing audio and transcript",
+  coachPromptBare.includes("No transcript") && !coachPromptBare.includes("undefined"));
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nall green");
 process.exit(failures ? 1 : 0);

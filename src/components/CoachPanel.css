@@ -1,0 +1,91 @@
+.coach-panel {
+  padding: 1rem 1.25rem;
+}
+
+.coach-note {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--chalkdim);
+}
+
+.coach-hint {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: rgba(201, 195, 180, 0.6);
+}
+
+/* indeterminate progress — Gemini gives no incremental status */
+.coach-bar-track {
+  height: 0.375rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.coach-bar-fill {
+  height: 100%;
+  width: 40%;
+  border-radius: 999px;
+  background: var(--amber);
+  animation: coach-slide 1.2s ease-in-out infinite;
+}
+@keyframes coach-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+.coach-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+}
+.coach-score {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  line-height: 1;
+  color: var(--amber);
+}
+.coach-score-max {
+  font-size: 0.875rem;
+  color: var(--chalkdim);
+}
+.coach-summary {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--chalk);
+}
+
+.coach-section {
+  margin-top: 0.875rem;
+}
+.coach-heading {
+  margin-bottom: 0.375rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--chalkdim);
+}
+.coach-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--chalkdim);
+}
+.coach-said {
+  color: var(--coral);
+}
+.coach-better {
+  color: var(--amber);
+}
+.coach-why {
+  color: rgba(201, 195, 180, 0.55);
+}
