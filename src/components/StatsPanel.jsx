@@ -2,7 +2,6 @@ import { formatDuration } from "../lib/analyzeSpeech.js";
 import { useLocalStorage } from "../hooks/useLocalStorage.js";
 import PronunciationPanel from "./PronunciationPanel.jsx";
 import CoachPanel from "./CoachPanel.jsx";
-import AsrPanel from "./AsrPanel.jsx";
 import TranscriptHeatmap from "./TranscriptHeatmap.jsx";
 import "./StatsPanel.css";
 
@@ -44,7 +43,7 @@ function VolumeSpark({ spark, sparkPauses }) {
   );
 }
 
-export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic, geminiKey, onOpenSettings, onApplyTranscript, onWordSpans }) {
+export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic, geminiKey, onOpenSettings, onWordSpans }) {
   const hasTranscript = result.transcript?.trim().length > 0;
   const a = stats.audio;
   // Short voiced regions in the waveform that no transcript words landed on.
@@ -171,16 +170,6 @@ export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic, 
         />
       )}
 
-      {result.audioBlob && (
-        <AsrPanel
-          audioBlob={result.audioBlob}
-          audioSamples={result.audioSamples}
-          micFloorDb={result.micFloorDb ?? null}
-          chromeFillerTotal={stats.fillerTotal}
-          onApply={onApplyTranscript}
-        />
-      )}
-
       {hasTranscript &&
         (stats.fillerTotal > 0 || stats.possibleFillerTotal > 0 || leftoverCount > 0) && (
         <div className="card card-dim filler-panel">
@@ -253,9 +242,7 @@ export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic, 
 
       {hasTranscript && stats.annotated ? (
         <div className="card card-dim stats-transcript">
-          <p className="label-xs filler-label">
-            transcript · volume per word{result.usedOnDeviceTranscript ? " · on-device" : ""}
-          </p>
+          <p className="label-xs filler-label">transcript · volume per word</p>
           <TranscriptHeatmap tokens={stats.annotated.tokens} />
           <p className="th-legend">
             <span className="th-legend-swatch" /> stronger highlight = louder ·{" "}

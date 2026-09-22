@@ -41,8 +41,6 @@ src/
     analyzeAudio.js           pauses/volume/pitch; voicedMask(), voicedRegions()
     pitch.js                  YIN-lite F0 detection
     alignTranscript.js        transcript↔waveform alignment (see gotchas)
-    asrChunks.js              silence-bounded chunk planning for on-device ASR
-    asr.worker.js, asr.js     Moonshine-base re-transcription worker + wrapper
     forcedAlign.js            CTC alignment; alignStates/charScores/wordSpans
     pronunciation.worker.js   wav2vec2 in a Web Worker (transformers.js v4)
     pronunciation.js, decodeAudio.js  worker wrapper, Blob → 16 kHz mono
@@ -106,13 +104,11 @@ src/
   LAN origins re-download every visit; panels warn about it. vite.config.js
   adds immutable headers for /models/ in dev/preview (vercel.json in prod).
 
-**On-device ASR (Moonshine, AsrPanel)**
-- Chunks are planned from `voicedRegions` (silence-bounded, ≤25s, 0.2s pad) —
-  never blind windows; hard-split only for >25s nonstop speech.
-- Worker segments carry real `endedAt` (chunk end) — lag self-calibrates to
-  ~0 on that path.
-- `applyOnDeviceTranscript` in App.jsx recomputes analyzeSpeech (no
-  strippedFillers needed — fillers are IN the text) + vocab + heatmap.
+**On-device ASR (Moonshine)** — REMOVED (user call, 2026-09-23): the
+onnxruntime-web wasm decoder crashed ("Missing required scale") and value
+overlapped with Gemini live. asr.worker.js/asr.js/asrChunks.js/AsrPanel gone;
+`voicedRegions()` stays (alignTranscript uses it). Non-Chrome browsers
+without a Gemini key get no transcript — accepted trade-off.
 
 **TranscriptHeatmap**
 - Tokens from `.map()` MUST have real whitespace between them

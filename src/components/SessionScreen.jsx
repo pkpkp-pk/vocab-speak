@@ -20,8 +20,11 @@ function micVerdict({ floorDb, peakDb, voicedPct }) {
   return `Mic sounds good (noise floor ${floorDb} dB).`;
 }
 
-// Human-readable copy for SpeechRecognition error codes.
-function friendlySpeechError(code) {
+// Human-readable copy for transcription engine errors. Format: "code" or
+// "code|detail" (detail = WS close code/reason or diagnostics).
+function friendlySpeechError(raw) {
+  const [code, detail] = String(raw).split("|");
+  const suffix = detail ? ` (${detail})` : "";
   switch (code) {
     case "not-allowed":
       return "Microphone access is blocked — allow it via the address-bar icon, then retry.";
@@ -31,11 +34,13 @@ function friendlySpeechError(code) {
     case "network":
       return "Chrome's speech service is unreachable — check your connection.";
     case "connection-error":
-      return "Couldn't reach Gemini — check the key in settings and your connection.";
+      return `Couldn't reach Gemini — check the key in settings and your connection.${suffix}`;
     case "connection-lost":
-      return "Gemini live connection dropped — retry.";
-    case "no-response":
-      return "Gemini live sent no transcript — check the key, or turn off Gemini transcription in settings to use Chrome.";
+      return `Gemini live connection dropped — retry.${suffix}`;
+    case "no-setup":
+      return `Gemini rejected the live session${suffix} — the key may lack Transcribe Live access. Turn off Gemini transcription in settings to use Chrome.`;
+    case "no-text":
+      return `Gemini connected but sent no transcript in 10s${suffix}. Turn off Gemini transcription in settings to use Chrome.`;
     default:
       return `Transcription error: ${code}.`;
   }

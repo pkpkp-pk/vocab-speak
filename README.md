@@ -49,11 +49,11 @@ output `dist`). The build fetches the model files and bundles them into
   whole list at once, so it stays a nudge rather than a script.
 - **Live transcription** — uses the browser's built-in `SpeechRecognition`
   API, no key needed for this part (audio goes to Google's speech service).
-- **On-device re-transcription** (optional) — a Moonshine ASR model running
-  in a Web Worker re-transcribes the recording after the session: it hears
-  the "um"/"uh" Chrome drops, works offline, and gives Firefox/Safari a
-  transcript at all. Chunked at silence boundaries; ~63 MB model served from
-  the app's own origin. Applying it recomputes every transcript stat.
+- **Gemini live transcription** (optional, bring-your-own Gemini key) —
+  streams mic audio to Gemini 3.5 Transcribe Live over WebSocket: hears the
+  "um"/"uh" Chrome drops, better with accents, and works in Firefox/Safari
+  where SpeechRecognition doesn't exist. Toggleable in settings; Chrome is
+  the default when no key is set.
 - **Mic check** — optional 4-second pre-session check measures your noise
   floor (feeding the pause/voicing detectors — fluent nonstop talkers
   otherwise get undercounted), catches dead or clipping mics, and settles

@@ -1,6 +1,5 @@
 // Sanity tests for the pure analysis modules (run with: node scripts/test-audio-libs.mjs)
 import { analyzeAudio, voicedRegions } from "../src/lib/analyzeAudio.js";
-import { planChunks } from "../src/lib/asrChunks.js";
 import { createResampler } from "../src/lib/resample.js";
 import { analyzeSpeech, diffStrippedFillers } from "../src/lib/analyzeSpeech.js";
 import { analyzeVocabulary } from "../src/lib/analyzeVocabulary.js";
@@ -236,7 +235,7 @@ check("measured floor keeps quiet speech voiced (no false pauses)",
   ntMeasured.pauseCount === 0 && ntMeasured.voicedSeconds > ntAdaptive.voicedSeconds + 2,
   `measured pauses ${ntMeasured.pauseCount}, voiced ${ntMeasured.voicedSeconds}s vs adaptive ${ntAdaptive.voicedSeconds}s`);
 
-// ---- voicedRegions + planChunks (on-device ASR chunk planning) ----
+// ---- voicedRegions (shared by alignTranscript) ----
 // Voiced 1-3s, 5-6s, 30-35s over 36s of samples.
 const chunkSamples = [];
 for (let i = 0; i < 36 * 60; i++) {
@@ -251,30 +250,6 @@ check("voicedRegions boundaries ≈ [1,3] [5,6] [30,35]",
   Math.abs(regions[0].start - 1) < 0.1 && Math.abs(regions[0].end - 3) < 0.1 &&
   Math.abs(regions[2].start - 30) < 0.1 && Math.abs(regions[2].end - 35) < 0.1,
   JSON.stringify(regions.map((r) => [+r.start.toFixed(1), +r.end.toFixed(1)])));
-const planned = planChunks(chunkSamples);
-check("planChunks groups close regions, splits far ones",
-  planned.length === 2, JSON.stringify(planned));
-check("planChunks pads but clamps inside the audio",
-  planned[0].start >= 0 && planned[0].start <= 1 && planned[1].end <= 36 && planned[1].end >= 35,
-  JSON.stringify(planned));
-check("planChunks never cuts inside a voiced region",
-  planned.every((c) =>
-    regions.every((r) => (c.start <= r.start - 0.01 || c.start >= r.end - 0.01) &&
-                          (c.end >= r.end + 0.01 - 0.4 || c.end <= r.start + 0.01))
-  ));
-// One 60s nonstop region hard-splits into <=25s pieces. Uses the measured
-// floor (-60): with no silence in the signal at all, the adaptive p10 floor
-// inflates above the signal and finds nothing — exactly the fluent-talker
-// bias the mic check fixes.
-const longSamples = [];
-for (let i = 0; i < 60 * 60; i++) {
-  longSamples.push({ t: i / 60, rmsDb: -20, f0: null });
-}
-const longPlanned = planChunks(longSamples, { floorDb: -60 });
-check("nonstop region hard-splits into <=25s chunks",
-  longPlanned.length === 3 && longPlanned.every((c) => c.end - c.start <= 25.5),
-  JSON.stringify(longPlanned.map((c) => +(c.end - c.start).toFixed(1))));
-check("planChunks empty on silence", planChunks(chunkSamples.map((s) => ({ ...s, rmsDb: -70 }))).length === 0);
 
 // ---- word spans from CTC states (20ms frames) ----
 // Existing HI fixture: H hot at frames 30-70, I at 90-120.

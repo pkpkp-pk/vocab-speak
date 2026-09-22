@@ -3,10 +3,11 @@
 // streamed out. The API key rides the WS query param — browser WebSocket can't
 // set headers, and this is a BYO-key app (disclosed in settings).
 //
-// Server messages of interest:
-//   { setupComplete: {} }                                  → ready to stream
-//   { serverContent: { inputTranscription: { text } } }    → transcript chunk
-//   { serverContent: { turnComplete: true } }              → utterance boundary
+// Server messages of interest (per ai.google.dev/api/live):
+//   { setupComplete: {} }                                        → ready to stream
+//   { serverContent: { interimInputTranscription: { text } } }   → partial text
+//   { serverContent: { inputTranscription: { text } } }          → FINAL text
+//   { serverContent: { turnComplete | interrupted } }            → utterance boundary
 
 const WS_URL =
   "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
@@ -26,6 +27,7 @@ export function createLiveSession({ apiKey, onText, onTurnComplete, onError }) {
   const ws = new WebSocket(`${WS_URL}?key=${encodeURIComponent(apiKey)}`);
   let ready = false;
   let closed = false;
+  let gotSetup = false;
   const queue = [];
 
   const sendPcm = (int16) => {
@@ -60,19 +62,26 @@ export function createLiveSession({ apiKey, onText, onTurnComplete, onError }) {
     }
     if (msg.setupComplete) {
       ready = true;
+      gotSetup = true;
       queue.splice(0).forEach(sendPcm);
       return;
     }
     const sc = msg.serverContent;
     if (!sc) return;
-    const text = sc.inputTranscription?.text;
-    if (text) onText?.(text);
+    // Partials and finals arrive on DIFFERENT fields — reading only
+    // inputTranscription misses the live stream entirely.
+    const interim = sc.interimInputTranscription?.text;
+    const finalText = sc.inputTranscription?.text;
+    if (interim) onText?.(interim, false);
+    if (finalText) onText?.(finalText, true);
     if (sc.turnComplete || sc.interrupted) onTurnComplete?.();
   };
 
   ws.onerror = () => onError?.("connection-error");
   ws.onclose = (e) => {
-    if (!closed && !e.wasClean) onError?.("connection-lost");
+    if (closed || e.wasClean) return;
+    const detail = `${e.code}${e.reason ? `: ${e.reason.slice(0, 120)}` : ""}`;
+    onError?.(gotSetup ? "connection-lost" : "no-setup", detail);
   };
 
   return {
@@ -81,6 +90,7 @@ export function createLiveSession({ apiKey, onText, onTurnComplete, onError }) {
       if (ready && ws.readyState === WebSocket.OPEN) sendPcm(int16);
       else queue.push(int16);
     },
+    gotSetup: () => gotSetup,
     close() {
       closed = true;
       try {

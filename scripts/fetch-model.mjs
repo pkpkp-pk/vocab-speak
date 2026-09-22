@@ -13,7 +13,7 @@ import { pipeline } from "node:stream/promises";
 
 const MODELS = [
   {
-    // Pronunciation scoring (CTC forced alignment), opt-in toggle.
+    // Pronunciation scoring (CTC forced alignment), default-on, opt-out toggle.
     repo: "Xenova/wav2vec2-base-960h",
     files: [
       "config.json",
@@ -23,24 +23,6 @@ const MODELS = [
       "vocab.json",
       "special_tokens_map.json",
       "onnx/model_quantized.onnx", // q8, ~91 MB
-    ],
-  },
-  {
-    // On-device re-transcription (fixes Chrome dropping fillers / no
-    // transcript at all on Firefox+Safari), opt-in button.
-    repo: "onnx-community/moonshine-base-ONNX",
-    files: [
-      "config.json",
-      "generation_config.json",
-      "preprocessor_config.json",
-      "special_tokens_map.json",
-      "tokenizer.json",
-      "tokenizer_config.json",
-      "onnx/encoder_model_quantized.onnx", // q8, ~20 MB
-      // q4 decoder — the int8 (quantized) decoder crashes onnxruntime-WEB
-      // (Missing required scale on embed_tokens). Must match DTYPE in
-      // src/lib/asr.worker.js.
-      "onnx/decoder_model_merged_q4.onnx", // q4, ~45 MB
     ],
   },
 ];

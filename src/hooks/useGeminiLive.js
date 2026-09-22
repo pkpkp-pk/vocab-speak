@@ -6,6 +6,11 @@ import { createLiveSession } from "../lib/geminiLive.js";
 // key presence. supported = a Gemini key exists. Audio capture rides the
 // session's existing mic stream; a public/ AudioWorklet resamples to the
 // 16 kHz PCM16 the API wants.
+//
+// The first WS attempt after page load fails often in practice (cold TLS/
+// HTTP3 to the streaming endpoint) while an immediate retry succeeds — so a
+// transient error (connection-error / connection-lost / no-response) triggers
+// ONE automatic session reopen before surfacing anything to the UI.
 export function useGeminiLive(apiKey) {
   const [supported] = useState(
     !!apiKey && typeof WebSocket !== "undefined" && typeof AudioWorkletNode !== "undefined"
@@ -24,10 +29,16 @@ export function useGeminiLive(apiKey) {
   const interimRef = useRef(""); // text of the utterance currently streaming
   const gotTextRef = useRef(false);
   const watchdogRef = useRef(null);
+  const retryTimerRef = useRef(null);
+  const autoRetriedRef = useRef(false);
+  const stoppedRef = useRef(true);
 
   const stop = useCallback(() => {
+    stoppedRef.current = true;
     clearTimeout(watchdogRef.current);
     watchdogRef.current = null;
+    clearTimeout(retryTimerRef.current);
+    retryTimerRef.current = null;
     sessionRef.current?.close();
     sessionRef.current = null;
     nodeRef.current?.disconnect();
@@ -48,51 +59,83 @@ export function useGeminiLive(apiKey) {
       segmentsRef.current = [];
       finalRef.current = "";
       interimRef.current = "";
+      gotTextRef.current = false;
+      autoRetriedRef.current = false;
+      stoppedRef.current = false;
       setFinalTranscript("");
       setInterimTranscript("");
       setError(null);
 
-      const session = createLiveSession({
-        apiKey,
-        onText: (text) => {
-          gotTextRef.current = true;
-          clearTimeout(watchdogRef.current);
-          watchdogRef.current = null;
-          // Chunks arrive cumulative-per-utterance in some builds, delta in
-          // others — replace when cumulative, append otherwise.
-          const prev = interimRef.current;
-          interimRef.current = text.startsWith(prev) ? text : prev + text;
-          setInterimTranscript(interimRef.current);
-        },
-        onTurnComplete: () => {
-          const text = interimRef.current.trim();
-          interimRef.current = "";
-          setInterimTranscript("");
-          if (!text) return;
-          finalRef.current += (finalRef.current ? " " : "") + text;
-          setFinalTranscript(finalRef.current);
-          segmentsRef.current.push({
-            text,
-            endedAt: (performance.now() - t0Ref.current) / 1000,
-          });
-        },
-        onError: (code) => {
-          setError(code);
-          setListening(false);
-        },
-      });
-      sessionRef.current = session;
+      const armWatchdog = () => {
+        clearTimeout(watchdogRef.current);
+        // A dead-but-quiet session (bad key, rejected setup, protocol drift)
+        // must not look like "listening…" forever — fail loud after 10s.
+        watchdogRef.current = setTimeout(() => {
+          if (gotTextRef.current) return;
+          const session = sessionRef.current;
+          sessionRef.current = null; // orphan the dead session
+          session?.close();
+          onTransient(session?.gotSetup() ? "no-text" : "no-setup", "no setupComplete");
+        }, 10000);
+      };
 
-      // A dead-but-quiet session (bad key, rejected setup, protocol drift)
-      // must not look like "listening…" forever — fail loud after 10s.
-      gotTextRef.current = false;
-      clearTimeout(watchdogRef.current);
-      watchdogRef.current = setTimeout(() => {
-        if (!gotTextRef.current) {
-          setError("no-response");
-          setListening(false);
+      const onTransient = (code, detail) => {
+        if (stoppedRef.current) return;
+        if (!autoRetriedRef.current) {
+          // One silent self-heal — the capture graph keeps running and feeds
+          // whatever sessionRef points at.
+          autoRetriedRef.current = true;
+          sessionRef.current?.close();
+          sessionRef.current = null;
+          retryTimerRef.current = setTimeout(() => {
+            if (!stoppedRef.current) openSession();
+          }, 800);
+          return;
         }
-      }, 10000);
+        console.warn("[gemini-live] failed:", code, detail ?? "");
+        setError(detail ? `${code}|${detail}` : code);
+        setListening(false);
+      };
+
+      const finalizeUtterance = (fallbackText = "") => {
+        const text = (fallbackText || interimRef.current).trim();
+        interimRef.current = "";
+        setInterimTranscript("");
+        if (!text) return;
+        finalRef.current += (finalRef.current ? " " : "") + text;
+        setFinalTranscript(finalRef.current);
+        segmentsRef.current.push({
+          text,
+          endedAt: (performance.now() - t0Ref.current) / 1000,
+        });
+      };
+
+      function openSession() {
+        const session = createLiveSession({
+          apiKey,
+          onText: (text, isFinal) => {
+            gotTextRef.current = true;
+            clearTimeout(watchdogRef.current);
+            watchdogRef.current = null;
+            if (isFinal) {
+              // Final text is authoritative for the utterance — replaces the
+              // accumulated interim.
+              finalizeUtterance(text);
+              return;
+            }
+            // Partials: replace when cumulative, append when delta.
+            const prev = interimRef.current;
+            interimRef.current = text.startsWith(prev) ? text : prev + text;
+            setInterimTranscript(interimRef.current);
+          },
+          onTurnComplete: () => finalizeUtterance(),
+          onError: onTransient,
+        });
+        sessionRef.current = session;
+        armWatchdog();
+      }
+
+      openSession();
 
       (async () => {
         try {
@@ -105,7 +148,9 @@ export function useGeminiLive(apiKey) {
             processorOptions: { sampleRate: ctx.sampleRate },
           });
           nodeRef.current = node;
-          node.port.onmessage = (e) => session.send(e.data);
+          // Route through sessionRef so the auto-retry's new session keeps
+          // receiving audio without rebuilding the capture graph.
+          node.port.onmessage = (e) => sessionRef.current?.send(e.data);
           // Worklets only run while connected to the graph — route through a
           // zero-gain node so nothing plays back.
           const mute = ctx.createGain();

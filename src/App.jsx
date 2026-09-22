@@ -166,34 +166,6 @@ export default function App() {
     pickTopic({ difficulty: id });
   };
 
-  // Swap Chrome's transcript for the on-device (Moonshine) one: recompute
-  // text stats and re-align the heatmap with the worker's chunk segments.
-  // The self-calibrating lag lands near 0 here — these timestamps are real.
-  const applyOnDeviceTranscript = (text, segments) => {
-    setSessionResult((prev) => {
-      if (!prev) return prev;
-      const result = {
-        ...prev.result,
-        transcript: text,
-        speechSegments: segments,
-        usedOnDeviceTranscript: true,
-      };
-      // No strippedFillers: the on-device transcript contains them directly.
-      const stats = analyzeSpeech(text, {
-        durationSeconds: result.durationSeconds,
-        keywords: topic.keywords,
-      });
-      stats.vocab = analyzeVocabulary(text, {
-        segments,
-        keywords: topic.keywords,
-        durationSeconds: result.durationSeconds,
-      });
-      stats.audio = prev.stats.audio;
-      stats.annotated = alignTranscript(segments, result.audioSamples, result.micFloorDb);
-      return { result, stats };
-    });
-  };
-
   // When deep pronunciation analysis produces CTC word spans, upgrade the
   // heatmap from estimated to measured per-word timings.
   const applyWordSpans = (words) => {
@@ -320,7 +292,6 @@ export default function App() {
             }}
             geminiKey={geminiKey}
             onOpenSettings={() => setSettingsOpen(true)}
-            onApplyTranscript={applyOnDeviceTranscript}
             onWordSpans={applyWordSpans}
           />
         )}
