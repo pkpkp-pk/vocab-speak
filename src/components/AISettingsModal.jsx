@@ -27,8 +27,9 @@ export default function AISettingsModal({ open, onClose, apiKey, geminiKey, onSa
       />
 
       <p className="modal-text ai-key-label">
-        <strong>Gemini key</strong> — powers the AI coach on the results screen, which
-        listens to your recording for feedback (sent to generativelanguage.googleapis.com).
+        <strong>Gemini key</strong> — powers live transcription during sessions
+        (Gemini 3.5 Transcribe Live; hears "um"/"uh" and works in any browser) and the
+        AI coach on the results screen (sent to generativelanguage.googleapis.com).
         Get a free key at aistudio.google.com.
       </p>
       <input

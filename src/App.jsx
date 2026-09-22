@@ -303,6 +303,7 @@ export default function App() {
             targetSeconds={targetSeconds}
             onFinish={finishSession}
             onExit={() => setStage("select")}
+            geminiKey={geminiKey}
           />
         )}
 

@@ -32,6 +32,7 @@ src/
   data/topics.js              built-in topic pool
   hooks/
     useSpeechRecognition.js   Chrome SpeechRecognition wrapper
+    useGeminiLive.js          Gemini 3.5 Transcribe Live engine (WS, BYO key)
     useAudioAnalysis.js       Web Audio sampler: {t, rmsDb, f0} at ~60 Hz
     useLocalStorage.js
   lib/
@@ -48,6 +49,9 @@ src/
     wav.js                    Float32 PCM → 16-bit WAV encoder (pure)
     aiCoach.js                optional BYO-key Gemini coach (audio upload)
     aiTopics.js               optional BYO-key AI topic generation (Anthropic)
+    geminiLive.js             Live API WS session (BidiGenerateContent)
+    resample.js               boxcar resampler to 16 kHz (keep public/
+                              pcm16.worklet.js in sync — raw-served, no imports)
   components/
     SessionScreen.jsx         timer + live transcript + MediaRecorder
     StatsPanel.jsx            results: stat blocks, sparkline, fillers, heatmap
@@ -144,10 +148,19 @@ if configured — safe to re-download).
 ## AI features (both opt-in, BYO key)
 
 - Topics: Anthropic key in `speakstage.apiKey` (Claude API has NO audio input).
-- Coach: Gemini key in `speakstage.geminiKey`. `aiCoach.js` reuses
-  `decodeToMono16k` (90 s cap) + `wav.js` (Gemini doesn't accept webm/opus) and
-  posts inline base64 WAV to `gemini-2.5-flash` with `responseMimeType:
-  application/json`. Model name is the `MODEL` const in aiCoach.js.
+- Gemini key in `speakstage.geminiKey` powers two things:
+  - **Live transcription** (`useGeminiLive.js` + `geminiLive.js` +
+    `public/pcm16.worklet.js`): SessionScreen picks it over Chrome whenever a
+    key exists (`engine` alias). Model `gemini-3.5-transcribe-live`, WS URL
+    `wss://generativelanguage.googleapis.com/ws/...BidiGenerateContent?key=`,
+    audio as `realtimeInput.audio` base64 PCM16 LE `audio/pcm;rate=16000`,
+    transcripts arrive as `serverContent.inputTranscription.text`,
+    `turnComplete` ends a segment. Interim chunks are defensive: replace when
+    cumulative, append when delta.
+  - **Coach** (`aiCoach.js`): reuses `decodeToMono16k` (90 s cap) + `wav.js`
+    (Gemini doesn't accept webm/opus), posts inline base64 WAV to
+    `gemini-3.6-flash` with `responseMimeType: application/json`. Retired
+    models 404 for new keys — bump the `MODEL` const when the error says so.
 
 ## Naming
 

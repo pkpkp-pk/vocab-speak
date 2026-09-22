@@ -1,6 +1,7 @@
 // Sanity tests for the pure analysis modules (run with: node scripts/test-audio-libs.mjs)
 import { analyzeAudio, voicedRegions } from "../src/lib/analyzeAudio.js";
 import { planChunks } from "../src/lib/asrChunks.js";
+import { createResampler } from "../src/lib/resample.js";
 import { analyzeSpeech, diffStrippedFillers } from "../src/lib/analyzeSpeech.js";
 import { analyzeVocabulary } from "../src/lib/analyzeVocabulary.js";
 import { encodeWavPcm16 } from "../src/lib/wav.js";
@@ -367,6 +368,29 @@ const earlyVocab = analyzeVocabulary("hello", {
 check("keyword timing: both early → early planner", earlyVocab.plannerLabel === "early planner",
   `got ${earlyVocab.plannerLabel}`);
 check("empty transcript → null", analyzeVocabulary("", {}) === null);
+
+// ---- resample.js: 48k → 16k for the Gemini Live PCM feed ----
+{
+  const rs = createResampler(48000);
+  const out = rs.push(new Float32Array(480).fill(0.5));
+  check("resampler 48k→16k ratio", out.length === 160, `got ${out.length}`);
+  check("resampler preserves DC level", out.every((v) => Math.abs(v - 0.5) < 1e-6));
+  // Chunk-boundary continuity: two halves must equal one push.
+  const rsA = createResampler(48000);
+  const whole = rsA.push(new Float32Array(480).fill(-0.25));
+  const rsB = createResampler(48000);
+  const split = [...rsB.push(new Float32Array(240).fill(-0.25)), ...rsB.push(new Float32Array(240).fill(-0.25))];
+  check("resampler chunk-boundary continuous", split.length === whole.length &&
+    split.every((v, i) => v === whole[i]), `split ${split.length} vs whole ${whole.length}`);
+  check("resampler passthrough at equal rates",
+    createResampler(16000).push(new Float32Array([1, 2, 3])).length === 3);
+  // Alternating ±1 at 48k averages toward 0 at 16k (boxcar anti-alias).
+  const alt = new Float32Array(480);
+  for (let i = 0; i < 480; i++) alt[i] = i % 2 ? 1 : -1;
+  const altOut = createResampler(48000).push(alt);
+  check("resampler averages Nyquist noise toward zero",
+    altOut.every((v) => Math.abs(v) < 0.4), `max |${Math.max(...altOut.map(Math.abs))}|`);
+}
 
 // ---- heatmap markup: chip spans need real whitespace between them ----
 // Adjacent elements from .map() have no break opportunities, so the browser
