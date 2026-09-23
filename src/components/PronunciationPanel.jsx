@@ -8,6 +8,11 @@ import "./PronunciationPanel.css";
 const CLEAR_SCORE = 0.7;
 const OK_SCORE = 0.45;
 
+// The model cache (Cache API) only exists in secure contexts — on plain-HTTP
+// LAN origins the ~95 MB model re-downloads every visit. Warn in every state,
+// not just idle (auto-run skips idle).
+const CAN_CACHE = typeof caches !== "undefined";
+
 function wordClass(score) {
   if (score >= CLEAR_SCORE) return "word-good";
   if (score >= OK_SCORE) return "word-ok";
@@ -86,7 +91,16 @@ export default function PronunciationPanel({ audioBlob, transcript, onWordSpans 
 
       {state === "busy" && (
         <>
-          <p className="pron-note">{progressLabel(progress)}</p>
+          <p className="pron-note">
+            {progressLabel(progress)}
+            {!CAN_CACHE && progress.stage === "download" && (
+              <>
+                {" "}
+                ⚠ plain-HTTP origin — no persistent cache, this downloads every visit. Use
+                localhost or HTTPS to fix.
+              </>
+            )}
+          </p>
           <div className="pron-bar-track">
             <div
               className="pron-bar-fill"
