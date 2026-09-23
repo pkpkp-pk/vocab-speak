@@ -53,10 +53,16 @@ export function createLiveSession({ apiKey, onText, onTurnComplete, onError }) {
     );
   };
 
-  ws.onmessage = (e) => {
+  ws.onmessage = async (e) => {
+    // Server frames arrive BINARY (Blob in browsers) — JSON.parse(e.data)
+    // throws on a Blob, which silently ate setupComplete and every transcript.
+    let raw = e.data;
+    if (raw instanceof Blob) raw = await raw.text();
+    else if (raw instanceof ArrayBuffer) raw = new TextDecoder().decode(raw);
+    console.debug("[gemini-live] rx", raw.slice(0, 300));
     let msg;
     try {
-      msg = JSON.parse(e.data);
+      msg = JSON.parse(raw);
     } catch {
       return;
     }
