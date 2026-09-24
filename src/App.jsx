@@ -49,8 +49,6 @@ export default function App() {
 
   const [aiMode, setAiMode] = useLocalStorage("speakstage.aiMode", false, (v) => typeof v === "boolean");
   const [apiKey, setApiKey] = useLocalStorage("speakstage.apiKey", "", (v) => typeof v === "string");
-  const [geminiKey, setGeminiKey] = useLocalStorage("speakstage.geminiKey", "", (v) => typeof v === "string");
-  const [geminiLive, setGeminiLive] = useLocalStorage("speakstage.geminiLive", true, (v) => typeof v === "boolean");
   const [customTopics, setCustomTopics] = useLocalStorage("speakstage.customTopics", [], Array.isArray);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [customModalOpen, setCustomModalOpen] = useState(false);
@@ -166,22 +164,6 @@ export default function App() {
     pickTopic({ difficulty: id });
   };
 
-  // When deep pronunciation analysis produces CTC word spans, upgrade the
-  // heatmap from estimated to measured per-word timings.
-  const applyWordSpans = (words) => {
-    setSessionResult((prev) => {
-      if (!prev) return prev;
-      const stats = { ...prev.stats };
-      stats.annotated = alignTranscript(
-        prev.result.speechSegments,
-        prev.result.audioSamples,
-        prev.result.micFloorDb,
-        words
-      );
-      return { ...prev, stats };
-    });
-  };
-
   const addCustomTopic = (t) => setCustomTopics((prev) => [...prev, t]);
   const deleteCustomTopic = (id) => setCustomTopics((prev) => prev.filter((t) => t.id !== id));
 
@@ -276,7 +258,6 @@ export default function App() {
             targetSeconds={targetSeconds}
             onFinish={finishSession}
             onExit={() => setStage("select")}
-            geminiKey={geminiLive ? geminiKey : ""}
           />
         )}
 
@@ -290,9 +271,6 @@ export default function App() {
               pickTopic();
               setStage("select");
             }}
-            geminiKey={geminiKey}
-            onOpenSettings={() => setSettingsOpen(true)}
-            onWordSpans={applyWordSpans}
           />
         )}
       </div>
@@ -300,13 +278,9 @@ export default function App() {
       <AISettingsModal
         open={settingsOpen}
         apiKey={apiKey}
-        geminiKey={geminiKey}
-        geminiLive={geminiLive}
         onClose={() => setSettingsOpen(false)}
-        onSave={({ apiKey: newKey, geminiKey: newGeminiKey, geminiLive: newGeminiLive }) => {
+        onSave={({ apiKey: newKey }) => {
           setApiKey(newKey);
-          setGeminiKey(newGeminiKey);
-          setGeminiLive(newGeminiLive);
           if (!newKey) setAiMode(false);
           setSettingsOpen(false);
         }}

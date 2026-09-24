@@ -1,25 +1,13 @@
 // Sanity tests for the pure analysis modules (run with: node scripts/test-audio-libs.mjs)
 import { analyzeAudio, voicedRegions } from "../src/lib/analyzeAudio.js";
-import { createResampler } from "../src/lib/resample.js";
 import { analyzeSpeech, diffStrippedFillers } from "../src/lib/analyzeSpeech.js";
 import { analyzeVocabulary } from "../src/lib/analyzeVocabulary.js";
-import { encodeWavPcm16 } from "../src/lib/wav.js";
-import { buildCoachPrompt } from "../src/lib/aiCoach.js";
 import { createServer } from "vite";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { fileURLToPath } from "node:url";
 import { alignTranscript } from "../src/lib/alignTranscript.js";
 import { detectPitch } from "../src/lib/pitch.js";
-import {
-  alignStates,
-  forcedAlign,
-  greedyDecode,
-  logitsToLogProbs,
-  scoreWords,
-  textToTargets,
-  wordSpansFromStates,
-} from "../src/lib/forcedAlign.js";
 
 let failures = 0;
 function check(name, cond, detail = "") {
@@ -73,42 +61,6 @@ check("wandering pitch → expressive", a2.pitch && a2.pitch.label === "expressi
 check("spark has ≤120 buckets", a1.spark.length <= 120, `got ${a1.spark.length}`);
 check("2 spark pause markers", a1.sparkPauses.length === 2, `got ${a1.sparkPauses.length}`);
 check("returns null on all-silence", analyzeAudio(makeSession(0).map(s => ({ ...s, rmsDb: -70, f0: null }))) === null);
-
-// ---- forcedAlign: synthetic logits for "HI" ----
-// vocab ids: 0 blank, 4 "|", 11 H, 10 I
-const V = 32;
-const T = 120;
-const logits = new Float32Array(T * V).fill(-8);
-const setHot = (t0, t1, id, val = 6) => { for (let t = t0; t < t1; t++) logits[t * V + id] = val; };
-setHot(0, 30, 0); // blank
-setHot(30, 70, 11); // H
-setHot(70, 90, 0); // blank
-setHot(90, 120, 10); // I
-const logProbs = logitsToLogProbs(logits, T, V);
-
-const vocab = { "|": 4, H: 11, I: 10 };
-const { ids, words } = textToTargets("hi", vocab);
-check("textToTargets maps 'hi' → [11,10]", ids.length === 2 && ids[0] === 11 && ids[1] === 10);
-
-const charScores = forcedAlign(logProbs, T, V, ids);
-check("forcedAlign returns per-char scores", charScores && charScores.length === 2);
-check("clean synthetic audio scores >0.8", charScores && charScores[0] > 0.8 && charScores[1] > 0.8,
-  charScores ? `got [${charScores[0].toFixed(2)}, ${charScores[1].toFixed(2)}]` : "null");
-
-const wordScores = scoreWords(charScores, words);
-check("word 'hi' scores high", wordScores[0].score > 0.8, `got ${wordScores[0].score}`);
-
-// Mismatch: align "HI" against audio that's all blank → low scores
-const blankLogits = logitsToLogProbs(new Float32Array(T * V).fill(-8).map((v, i) => (i % V === 0 ? 6 : v)), T, V);
-const badScores = forcedAlign(blankLogits, T, V, ids);
-check("mismatched audio scores <0.2", badScores && badScores[0] < 0.2 && badScores[1] < 0.2,
-  badScores ? `got [${badScores[0].toFixed(3)}, ${badScores[1].toFixed(3)}]` : "null");
-
-// greedy decode round-trip
-const idToChar = [];
-idToChar[4] = "|"; idToChar[11] = "H"; idToChar[10] = "I";
-check("greedyDecode recovers 'hi'", greedyDecode(logProbs, T, V, idToChar) === "hi",
-  `got "${greedyDecode(logProbs, T, V, idToChar)}"`);
 
 // ---- alignTranscript: two segments separated by a real silence ----
 // Timeline (60fps): 1-3s voiced at -22 dB, 3-5.5s silence, 5.5-8.5s voiced at -15 dB.
@@ -251,27 +203,6 @@ check("voicedRegions boundaries ≈ [1,3] [5,6] [30,35]",
   Math.abs(regions[2].start - 30) < 0.1 && Math.abs(regions[2].end - 35) < 0.1,
   JSON.stringify(regions.map((r) => [+r.start.toFixed(1), +r.end.toFixed(1)])));
 
-// ---- word spans from CTC states (20ms frames) ----
-// Existing HI fixture: H hot at frames 30-70, I at 90-120.
-const hiStates = alignStates(logProbs, T, V, ids);
-const hiSpans = wordSpansFromStates(hiStates, words);
-check("word span matches the hot frames (0.6s-2.4s)",
-  hiSpans.length === 1 && Math.abs(hiSpans[0].start - 0.6) < 0.03 && Math.abs(hiSpans[0].end - 2.4) < 0.03,
-  `got [${hiSpans[0]?.start}, ${hiSpans[0]?.end}]`);
-
-// Two words: H 20-40, I 40-60, | 60-70, H 70-90, I 90-110.
-const logits2 = new Float32Array(T * V).fill(-8);
-const setHot2 = (t0, t1, id, val = 6) => { for (let t = t0; t < t1; t++) logits2[t * V + id] = val; };
-setHot2(0, 20, 0); setHot2(20, 40, 11); setHot2(40, 60, 10); setHot2(60, 70, 4);
-setHot2(70, 90, 11); setHot2(90, 110, 10); setHot2(110, 120, 0);
-const lp2 = logitsToLogProbs(logits2, T, V);
-const { ids: ids2, words: words2 } = textToTargets("hi hi", vocab);
-const spans2 = wordSpansFromStates(alignStates(lp2, T, V, ids2), words2);
-check("two words get distinct spans",
-  spans2.length === 2 && Math.abs(spans2[0].start - 0.4) < 0.03 && Math.abs(spans2[0].end - 1.2) < 0.03 &&
-  Math.abs(spans2[1].start - 1.4) < 0.03 && Math.abs(spans2[1].end - 2.2) < 0.03,
-  JSON.stringify(spans2));
-
 // ---- alignTranscript wordSpans branch: measured timings, no lag ----
 const spSamples = [];
 for (let i = 0; i < 7 * 60; i++) {
@@ -344,29 +275,6 @@ check("keyword timing: both early → early planner", earlyVocab.plannerLabel ==
   `got ${earlyVocab.plannerLabel}`);
 check("empty transcript → null", analyzeVocabulary("", {}) === null);
 
-// ---- resample.js: 48k → 16k for the Gemini Live PCM feed ----
-{
-  const rs = createResampler(48000);
-  const out = rs.push(new Float32Array(480).fill(0.5));
-  check("resampler 48k→16k ratio", out.length === 160, `got ${out.length}`);
-  check("resampler preserves DC level", out.every((v) => Math.abs(v - 0.5) < 1e-6));
-  // Chunk-boundary continuity: two halves must equal one push.
-  const rsA = createResampler(48000);
-  const whole = rsA.push(new Float32Array(480).fill(-0.25));
-  const rsB = createResampler(48000);
-  const split = [...rsB.push(new Float32Array(240).fill(-0.25)), ...rsB.push(new Float32Array(240).fill(-0.25))];
-  check("resampler chunk-boundary continuous", split.length === whole.length &&
-    split.every((v, i) => v === whole[i]), `split ${split.length} vs whole ${whole.length}`);
-  check("resampler passthrough at equal rates",
-    createResampler(16000).push(new Float32Array([1, 2, 3])).length === 3);
-  // Alternating ±1 at 48k averages toward 0 at 16k (boxcar anti-alias).
-  const alt = new Float32Array(480);
-  for (let i = 0; i < 480; i++) alt[i] = i % 2 ? 1 : -1;
-  const altOut = createResampler(48000).push(alt);
-  check("resampler averages Nyquist noise toward zero",
-    altOut.every((v) => Math.abs(v) < 0.4), `max |${Math.max(...altOut.map(Math.abs))}|`);
-}
-
 // ---- heatmap markup: chip spans need real whitespace between them ----
 // Adjacent elements from .map() have no break opportunities, so the browser
 // treats the whole row as one unbreakable word and overflows the card.
@@ -396,44 +304,6 @@ check("empty transcript → null", analyzeVocabulary("", {}) === null);
     await server.close();
   }
 }
-
-// ---- wav.js: 16-bit PCM WAV encoder for the Gemini coach upload ----
-const wav = encodeWavPcm16(new Float32Array([0, 0.5, -0.5, 1, -1]), 16000);
-const wavAscii = (off, n) => String.fromCharCode(...wav.slice(off, off + n));
-const wavView = new DataView(wav.buffer);
-check("wav header is RIFF/WAVE", wavAscii(0, 4) === "RIFF" && wavAscii(8, 4) === "WAVE");
-check("wav total size = 44-byte header + data", wav.length === 44 + 10);
-check("wav is mono 16-bit 16kHz PCM",
-  wavView.getUint16(20, true) === 1 && wavView.getUint16(22, true) === 1 &&
-  wavView.getUint16(34, true) === 16 && wavView.getUint32(24, true) === 16000);
-check("wav chunk sizes consistent",
-  wavView.getUint32(40, true) === 10 && wavView.getUint32(4, true) === 36 + 10);
-check("wav sample values roundtrip",
-  wavView.getInt16(46, true) === 16383 && wavView.getInt16(48, true) === -16384,
-  `got [${wavView.getInt16(46, true)}, ${wavView.getInt16(48, true)}]`);
-check("wav clamps out-of-range samples",
-  wavView.getInt16(50, true) === 32767 && wavView.getInt16(52, true) === -32768);
-
-// ---- aiCoach.js: coach prompt builder (pure) ----
-const coachPrompt = buildCoachPrompt({
-  topic: { title: "Networking", prompt: "Talk about it" },
-  transcript: "um hello there",
-  stats: {
-    wpm: 120,
-    audio: { pauseCount: 2, longestPause: 1.5, meanDb: -22, volumeLabel: "good", pitch: { label: "monotone" } },
-  },
-});
-check("coach prompt embeds measured stats and transcript",
-  coachPrompt.includes("120") && coachPrompt.includes("um hello there") && coachPrompt.includes("monotone"));
-check("coach prompt warns that the transcript drops fillers",
-  /DROPS filler/i.test(coachPrompt));
-const coachPromptBare = buildCoachPrompt({
-  topic: { title: "T", prompt: "P" },
-  transcript: "",
-  stats: { wpm: 0, audio: null },
-});
-check("coach prompt handles missing audio and transcript",
-  coachPromptBare.includes("No transcript") && !coachPromptBare.includes("undefined"));
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nall green");
 process.exit(failures ? 1 : 0);

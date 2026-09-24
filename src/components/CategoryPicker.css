@@ -46,10 +46,19 @@
   font-size: 0.875rem;
   line-height: 1.25rem;
   color: var(--chalkdim);
-  transition: color 0.2s;
+  transition:
+    transform 0.18s var(--ease-spring-bouncy),
+    color 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 .pill:hover {
   color: var(--chalk);
+}
+.pill:not(.active):hover {
+  transform: translateY(-2px);
+  background: rgba(135, 186, 195, 0.15);
+  box-shadow: 0 5px 15px rgba(71, 52, 114, 0.18);
 }
 .pill.active {
   color: var(--stage-950);

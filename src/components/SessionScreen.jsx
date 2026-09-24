@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import TimerRing from "./TimerRing.jsx";
 import KeywordHelper, { REVEAL_BATCH } from "./KeywordHelper.jsx";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition.js";
-import { useGeminiLive } from "../hooks/useGeminiLive.js";
 import { useAudioAnalysis, checkMic } from "../hooks/useAudioAnalysis.js";
 import "./SessionScreen.css";
 
@@ -20,11 +19,8 @@ function micVerdict({ floorDb, peakDb, voicedPct }) {
   return `Mic sounds good (noise floor ${floorDb} dB).`;
 }
 
-// Human-readable copy for transcription engine errors. Format: "code" or
-// "code|detail" (detail = WS close code/reason or diagnostics).
-function friendlySpeechError(raw) {
-  const [code, detail] = String(raw).split("|");
-  const suffix = detail ? ` (${detail})` : "";
+// Human-readable copy for Chrome SpeechRecognition error codes.
+function friendlySpeechError(code) {
   switch (code) {
     case "not-allowed":
       return "Microphone access is blocked — allow it via the address-bar icon, then retry.";
@@ -33,20 +29,14 @@ function friendlySpeechError(raw) {
     case "service-not-allowed":
     case "network":
       return "Chrome's speech service is unreachable — check your connection.";
-    case "connection-error":
-      return `Couldn't reach Gemini — check the key in settings and your connection.${suffix}`;
-    case "connection-lost":
-      return `Gemini live connection dropped — retry.${suffix}`;
-    case "no-setup":
-      return `Gemini rejected the live session${suffix} — the key may lack Transcribe Live access. Turn off Gemini transcription in settings to use Chrome.`;
-    case "no-text":
-      return `Gemini connected but sent no transcript in 10s${suffix}. Turn off Gemini transcription in settings to use Chrome.`;
+    case "no-results":
+      return "Nothing came back from the speech service. On Android, open Play Store → update/enable the Google app and \"Speech Recognition & Synthesis\", then retry — or use Chrome on a laptop.";
     default:
       return `Transcription error: ${code}.`;
   }
 }
 
-export default function SessionScreen({ topic, targetSeconds, onFinish, onExit, geminiKey }) {
+export default function SessionScreen({ topic, targetSeconds, onFinish, onExit }) {
   const [elapsed, setElapsed] = useState(0);
   const [revealedCount, setRevealedCount] = useState(0);
   const [running, setRunning] = useState(false);
@@ -61,9 +51,6 @@ export default function SessionScreen({ topic, targetSeconds, onFinish, onExit, 
   const micFloorRef = useRef(null);
 
   const speech = useSpeechRecognition();
-  const geminiLive = useGeminiLive(geminiKey);
-  // Gemini Live when a key exists (hears fillers, better accents), else Chrome.
-  const engine = geminiLive.supported ? geminiLive : speech;
   const audio = useAudioAnalysis();
   const t0Ref = useRef(0);
   const streamRef = useRef(null);
@@ -127,7 +114,7 @@ export default function SessionScreen({ topic, targetSeconds, onFinish, onExit, 
     calibStreamRef.current = null; // the hook owns it now (stopped at stop())
     t0Ref.current = t0;
     streamRef.current = stream; // kept for the error-retry path
-    if (engine.supported) engine.start(t0, stream);
+    if (speech.supported) speech.start(t0, stream);
     if (stream && typeof MediaRecorder !== "undefined") {
       chunksRef.current = [];
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -145,15 +132,15 @@ export default function SessionScreen({ topic, targetSeconds, onFinish, onExit, 
   const endSession = () => {
     setRunning(false);
     clearInterval(intervalRef.current);
-    if (engine.supported) engine.stop();
+    if (speech.supported) speech.stop();
     streamRef.current = null;
 
     // Timestamped final segments for waveform alignment. If the user finishes
     // mid-thought, the trailing interim text isn't in any segment yet — append
     // it so the annotated transcript covers everything that was said.
-    const speechSegments = engine.supported ? engine.getSegments().slice() : [];
+    const speechSegments = speech.supported ? speech.getSegments().slice() : [];
     const joined = speechSegments.map((s) => s.text).join(" ").trim();
-    const full = engine.fullTranscript;
+    const full = speech.fullTranscript;
     const leftover = full.length > joined.length ? full.slice(joined.length).trim() : "";
     if (leftover) speechSegments.push({ text: leftover, endedAt: elapsed });
 
@@ -165,9 +152,8 @@ export default function SessionScreen({ topic, targetSeconds, onFinish, onExit, 
         audioSamples: audio.stop(),
         audioBlob,
         speechSegments,
-        // "um"/"uh" Chrome stripped from finals, recovered from interims
-        // (always empty under Gemini Live — that transcript keeps fillers).
-        strippedFillers: engine.supported ? { ...engine.getStrippedFillers() } : {},
+        // "um"/"uh" Chrome stripped from finals, recovered from interims.
+        strippedFillers: speech.supported ? { ...speech.getStrippedFillers() } : {},
         // Measured noise floor from the mic check (null = adaptive fallback).
         micFloorDb: micFloorRef.current,
       });
@@ -199,7 +185,7 @@ export default function SessionScreen({ topic, targetSeconds, onFinish, onExit, 
       {!running ? (
         <>
           <button onClick={beginSession} className="btn-primary session-start">
-            {engine.supported ? "🎙️ Start talking" : "▶ Start timer"}
+            {speech.supported ? "🎙️ Start talking" : "▶ Start timer"}
           </button>
 
           {audio.supported && (
@@ -245,25 +231,23 @@ export default function SessionScreen({ topic, targetSeconds, onFinish, onExit, 
         </>
       ) : (
         <div className="session-running">
-          {engine.supported && (
+          {speech.supported && (
             <div className="transcript-live">
-              <span className="transcript-final">{engine.finalTranscript}</span>
-              <span className="transcript-interim">{engine.interimTranscript}</span>
-              {!engine.error && !engine.finalTranscript && !engine.interimTranscript && (
+              <span className="transcript-final">{speech.finalTranscript}</span>
+              <span className="transcript-interim">{speech.interimTranscript}</span>
+              {!speech.error && !speech.finalTranscript && !speech.interimTranscript && (
                 <span className="transcript-waiting">listening…</span>
               )}
-              <span className="engine-badge">
-                {geminiLive.supported ? "Gemini live" : "Chrome"} transcription
-              </span>
+              <span className="engine-badge">Chrome transcription</span>
             </div>
           )}
 
-          {engine.error && (
+          {speech.error && (
             <p className="session-error">
-              {friendlySpeechError(engine.error)}{" "}
+              {friendlySpeechError(speech.error)}{" "}
               <button
                 className="session-error-retry"
-                onClick={() => engine.start(t0Ref.current, streamRef.current)}
+                onClick={() => speech.start(t0Ref.current, streamRef.current)}
               >
                 retry
               </button>
@@ -278,11 +262,10 @@ export default function SessionScreen({ topic, targetSeconds, onFinish, onExit, 
         </div>
       )}
 
-      {!engine.supported && (
+      {!speech.supported && (
         <p className="session-note">
-          Your browser doesn't support live transcription — try Chrome or Edge, or add a
-          Gemini key (gear icon) to transcribe anywhere. The timer and keyword prompts still
-          work fine here.
+          Your browser doesn't support live transcription — try Chrome or Edge.
+          The timer and keyword prompts still work fine here.
         </p>
       )}
 

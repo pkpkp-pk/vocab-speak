@@ -22,20 +22,10 @@ everywhere.
 Build for production with `npm run build`; preview that build with
 `npm run preview`.
 
-## Self-hosted model files
-
-`npm run dev` and `npm run build` first run `scripts/fetch-model.mjs`, which
-downloads the wav2vec2 files into `public/models/` (gitignored, ~91 MB,
-skipped if already present). The app then loads the model from its own
-origin — on Vercel that means your deployment's CDN, with immutable cache
-headers from `vercel.json`. If the local files are ever missing, the app
-falls back to downloading from the Hugging Face hub automatically.
-
 ## Deploying to Vercel
 
 Import the repo, keep the default Vite preset (build command `npm run build`,
-output `dist`). The build fetches the model files and bundles them into
-`dist/models/`, so no extra configuration is needed.
+output `dist`). No extra configuration is needed.
 
 ## How it works
 
@@ -49,11 +39,6 @@ output `dist`). The build fetches the model files and bundles them into
   whole list at once, so it stays a nudge rather than a script.
 - **Live transcription** — uses the browser's built-in `SpeechRecognition`
   API, no key needed for this part (audio goes to Google's speech service).
-- **Gemini live transcription** (optional, bring-your-own Gemini key) —
-  streams mic audio to Gemini 3.5 Transcribe Live over WebSocket: hears the
-  "um"/"uh" Chrome drops, better with accents, and works in Firefox/Safari
-  where SpeechRecognition doesn't exist. Toggleable in settings; Chrome is
-  the default when no key is set.
 - **Mic check** — optional 4-second pre-session check measures your noise
   floor (feeding the pause/voicing detectors — fluent nonstop talkers
   otherwise get undercounted), catches dead or clipping mics, and settles
@@ -73,18 +58,6 @@ output `dist`). The build fetches the model files and bundles them into
   `src/lib/pitch.js`), so they work in any modern browser — no transcript
   needed. Auto-gain is disabled at capture time on purpose, so the volume
   stats reflect you, not your OS's gain riding.
-- **Deep pronunciation analysis** (experimental, opt-in on the results
-  screen) — scores each word by forced-aligning the transcript against a
-  wav2vec2 CTC model running in a Web Worker via transformers.js
-  (`src/lib/pronunciation.worker.js`, `src/lib/forcedAlign.js`). Runs fully
-  on-device; no API key. The ~91 MB quantized model is served from the app's
-  own origin (see below) and cached by the browser after the first run.
-- **AI coach** (optional, bring-your-own Gemini key) — sends the session
-  recording (WAV, first 90 s) to Google's Gemini API for the feedback local
-  metrics can't give: fillers heard by ear, pronunciation tips, grammar fixes,
-  vocabulary upgrades, and a fluency score (`src/lib/aiCoach.js`,
-  `src/components/CoachPanel.jsx`). Nothing is sent until you click the
-  button; the key lives only in your browser's local storage.
 - **AI bonus mode** (optional) — toggle "AI mode" in the header and paste
   your own Anthropic API key (gear icon) to generate fresh topics and
   keyword sets on demand instead of pulling from the local list. The key
@@ -103,8 +76,6 @@ src/
   lib/analyzeAudio.js      pause / volume / pitch-variety stats
   lib/pitch.js             YIN-lite pitch detector
   lib/aiTopics.js          optional AI topic generation
-  lib/pronunciation.worker.js   on-device wav2vec2 scoring (opt-in)
-  lib/forcedAlign.js       CTC forced alignment / greedy decode
   components/              Header, CategoryPicker, TopicCard, TimerRing,
                             KeywordHelper, SessionScreen, StatsPanel,
                             AISettingsModal

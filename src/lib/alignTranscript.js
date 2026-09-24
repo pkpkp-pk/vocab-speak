@@ -32,8 +32,9 @@ const MIN_PAUSE_S = 0.3; // gaps shorter than this aren't worth a marker
 const LEFTOVER_MAX_S = 0.8; // longer unassigned regions are missed phrases, not disfluencies
 
 // floorDb: optional measured noise floor (mic check) — see voicedMask.
-// wordSpans: optional measured per-word timings from the deep-analysis CTC
-// pass — when present, the whole lag/anchor heuristic is skipped.
+// wordSpans: optional measured per-word timings — when present, the whole
+// lag/anchor heuristic is skipped. (Producer was the removed pronunciation
+// stack; param kept and tested, currently never passed.)
 export function alignTranscript(segments, samples, floorDb = null, wordSpans = null) {
   const usableSegments = (segments ?? []).filter((s) => s.text?.trim());
   if (!samples?.length) return null;

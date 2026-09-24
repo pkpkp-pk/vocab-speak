@@ -19,18 +19,3 @@
 .modal-clear:hover {
   color: var(--chalk);
 }
-
-.ai-live-toggle {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-  font-size: 0.75rem;
-  line-height: 1.4;
-  color: var(--chalkdim);
-  cursor: pointer;
-}
-.ai-live-toggle input {
-  margin-top: 0.15rem;
-  accent-color: var(--amber);
-}

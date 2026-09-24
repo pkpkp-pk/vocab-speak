@@ -79,9 +79,10 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid #f2c14e;
+  outline: 2px solid var(--amber);
   outline-offset: 3px;
   border-radius: 4px;
+  box-shadow: 0 0 0 4px rgba(135, 186, 195, 0.10);
 }
 
 /* ========== Shared keyframes ========== */
@@ -108,13 +109,6 @@ body {
   font-size: 0.875rem;
   line-height: 1.25rem;
   box-shadow: var(--shadow-coral);
-  transition: transform 0.15s;
-}
-.btn-primary:hover {
-  transform: scale(1.02);
-}
-.btn-primary:active {
-  transform: scale(0.96);
 }
 
 /* amber call-to-action button ("Save", "Next topic") */
@@ -127,10 +121,6 @@ body {
   padding: 0.5rem 1.25rem;
   font-size: 0.875rem;
   line-height: 1.25rem;
-  transition: transform 0.15s;
-}
-.btn-amber:active {
-  transform: scale(0.96);
 }
 
 /* outlined secondary button ("Spin again") */
@@ -142,11 +132,6 @@ body {
   padding: 0.625rem 1.25rem;
   font-size: 0.875rem;
   line-height: 1.25rem;
-  transition: border-color 0.2s, color 0.2s;
-}
-.btn-ghost:hover {
-  border-color: rgba(255, 255, 255, 0.3);
-  color: var(--chalk);
 }
 
 /* text input / select / textarea */
@@ -162,9 +147,6 @@ body {
 }
 .input::placeholder {
   color: rgba(201, 195, 180, 0.5);
-}
-.input:focus {
-  border-color: rgba(242, 193, 78, 0.5);
 }
 textarea.input {
   resize: none;
@@ -206,6 +188,156 @@ textarea.input {
 .scrollbar-thin::-webkit-scrollbar-thumb {
   background: rgba(245, 241, 232, 0.2);
   border-radius: 999px;
+}
+
+/* ========== Hover / interaction behaviour ========== */
+
+/* primary + amber buttons: lift, sweep, glow */
+.btn-primary,
+.btn-amber {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 0.18s var(--ease-spring-bouncy),
+    box-shadow 0.22s ease,
+    filter 0.22s ease;
+}
+
+/* light sweep across the button */
+.btn-primary::after,
+.btn-amber::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.25),
+    transparent
+  );
+  transform: skewX(-20deg);
+  transition: left 0.5s ease;
+}
+
+.btn-primary:hover,
+.btn-amber:hover {
+  transform: translateY(-3px) scale(1.025);
+  filter: brightness(1.06);
+}
+
+.btn-primary:hover {
+  box-shadow:
+    0 14px 35px -10px rgba(214, 244, 237, 0.55),
+    0 0 20px rgba(214, 244, 237, 0.12);
+}
+
+.btn-amber:hover {
+  box-shadow:
+    0 12px 30px -10px rgba(135, 186, 195, 0.55),
+    0 0 18px rgba(135, 186, 195, 0.12);
+}
+
+.btn-primary:hover::after,
+.btn-amber:hover::after {
+  left: 130%;
+}
+
+.btn-primary:active,
+.btn-amber:active {
+  transform: translateY(0) scale(0.96);
+}
+
+/* ghost buttons */
+.btn-ghost {
+  transition:
+    transform 0.18s var(--ease-spring-soft),
+    border-color 0.2s ease,
+    color 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.btn-ghost:hover {
+  transform: translateY(-2px);
+  border-color: rgba(135, 186, 195, 0.65);
+  color: var(--chalk);
+  background: rgba(135, 186, 195, 0.08);
+  box-shadow: 0 6px 20px rgba(71, 52, 114, 0.20);
+}
+
+.btn-ghost:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* chips / category pills */
+.chip {
+  transition:
+    transform 0.18s var(--ease-spring-bouncy),
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.chip:hover {
+  transform: translateY(-2px);
+  background: rgba(135, 186, 195, 0.15);
+  border-color: rgba(135, 186, 195, 0.30);
+  box-shadow: 0 5px 15px rgba(71, 52, 114, 0.18);
+}
+
+/* inputs */
+.input {
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.input:hover {
+  border-color: rgba(135, 186, 195, 0.35);
+}
+
+.input:focus {
+  border-color: rgba(135, 186, 195, 0.75);
+  box-shadow: 0 0 0 3px rgba(135, 186, 195, 0.10);
+}
+
+/* cards */
+.card {
+  transition:
+    transform 0.2s var(--ease-spring-soft),
+    border-color 0.2s ease,
+    box-shadow 0.25s ease;
+}
+
+.card:hover {
+  border-color: rgba(135, 186, 195, 0.20);
+  box-shadow: 0 15px 40px rgba(71, 52, 114, 0.18);
+}
+
+/* icon buttons */
+button[aria-label],
+.icon-button {
+  transition:
+    transform 0.18s var(--ease-spring-bouncy),
+    background-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+button[aria-label]:hover,
+.icon-button:hover {
+  transform: translateY(-2px) scale(1.05);
+  background-color: rgba(135, 186, 195, 0.10);
+  box-shadow: 0 5px 15px rgba(71, 52, 114, 0.15);
+}
+
+button[aria-label]:active,
+.icon-button:active {
+  transform: scale(0.92);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -2,3 +2,12 @@ node_modules/
 dist/
 # Downloaded at build time by scripts/fetch-model.mjs (~91 MB, no repo bloat)
 public/models/
+# Local keys — never commit
+.env
+.env.*
+# Vercel CLI link dir
+.vercel
+# Agent settings (per CLAUDE.md)
+.claude/
+*.log
+.DS_Store

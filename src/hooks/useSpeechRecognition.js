@@ -19,6 +19,11 @@ export function useSpeechRecognition() {
   const recognitionRef = useRef(null);
   const finalRef = useRef("");
   const shouldRestartRef = useRef(false);
+  // Android Chrome delegates recognition to the Google app's speech service;
+  // when that service is missing/disabled it hangs SILENTLY — no onerror, no
+  // onresult. A no-result watchdog turns that hang into a visible error.
+  const gotResultRef = useRef(false);
+  const watchdogRef = useRef(null);
   // Per-final-result timing, for aligning the transcript to the waveform.
   const segmentsRef = useRef([]);
   const t0Ref = useRef(0);
@@ -36,9 +41,16 @@ export function useSpeechRecognition() {
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = "en-US";
+    // NO recognition.lang: hardcoding "en-US" makes Android's speech service
+    // (running the device locale, e.g. en-IN) hear speech, end normally, and
+    // return NOTHING — no result, no error (proven on-device 2026-09-24 with
+    // an isolated config matrix: lang=en-US empty, bare config recognized).
+    // Leaving lang unset = device default locale, which recognizes everywhere.
 
     recognition.onresult = (event) => {
+      gotResultRef.current = true;
+      clearTimeout(watchdogRef.current);
+      setError(null); // service responded — any earlier watchdog hint is stale
       // A drop in resultIndex means the results list was rebuilt (the
       // recognizer auto-stopped and onend restarted it) — interim snapshots
       // from the old list are stale and must go.
@@ -102,6 +114,7 @@ export function useSpeechRecognition() {
     recognitionRef.current = recognition;
     return () => {
       shouldRestartRef.current = false;
+      clearTimeout(watchdogRef.current);
       recognition.stop();
     };
   }, []);
@@ -120,6 +133,11 @@ export function useSpeechRecognition() {
     setInterimTranscript("");
     setError(null);
     shouldRestartRef.current = true;
+    gotResultRef.current = false;
+    clearTimeout(watchdogRef.current);
+    watchdogRef.current = setTimeout(() => {
+      if (!gotResultRef.current && shouldRestartRef.current) setError("no-results");
+    }, 10000);
     try {
       recognitionRef.current.start();
       setListening(true);
@@ -130,6 +148,7 @@ export function useSpeechRecognition() {
 
   const stop = useCallback(() => {
     if (!recognitionRef.current) return;
+    clearTimeout(watchdogRef.current);
     shouldRestartRef.current = false;
     recognitionRef.current.stop();
     setListening(false);

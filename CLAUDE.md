@@ -18,11 +18,10 @@ voice metrics. No backend; deployed as a static site on Vercel.
 
 ## Commands
 
-- `npm run dev` / `npm run build` — both run `scripts/fetch-model.mjs` first
-  (downloads the wav2vec2 model into `public/models/`, skip-if-present).
+- `npm run dev` / `npm run build` — plain Vite, no pre-steps.
 - `node scripts/test-audio-libs.mjs` — unit suite for the pure analysis libs
   (plus an SSR render check of TranscriptHeatmap via vite's middleware mode).
-  Run it after touching anything in `src/lib/` or the heatmap. Currently 76 checks.
+  Run it after touching anything in `src/lib/` or the heatmap. Currently 54 checks.
 
 ## Architecture
 
@@ -32,7 +31,6 @@ src/
   data/topics.js              built-in topic pool
   hooks/
     useSpeechRecognition.js   Chrome SpeechRecognition wrapper
-    useGeminiLive.js          Gemini 3.5 Transcribe Live engine (WS, BYO key)
     useAudioAnalysis.js       Web Audio sampler: {t, rmsDb, f0} at ~60 Hz
     useLocalStorage.js
   lib/
@@ -41,22 +39,12 @@ src/
     analyzeAudio.js           pauses/volume/pitch; voicedMask(), voicedRegions()
     pitch.js                  YIN-lite F0 detection
     alignTranscript.js        transcript↔waveform alignment (see gotchas)
-    forcedAlign.js            CTC alignment; alignStates/charScores/wordSpans
-    pronunciation.worker.js   wav2vec2 in a Web Worker (transformers.js v4)
-    pronunciation.js, decodeAudio.js  worker wrapper, Blob → 16 kHz mono
-    wav.js                    Float32 PCM → 16-bit WAV encoder (pure)
-    aiCoach.js                optional BYO-key Gemini coach (audio upload)
     aiTopics.js               optional BYO-key AI topic generation (Anthropic)
-    geminiLive.js             Live API WS session (BidiGenerateContent)
-    resample.js               boxcar resampler to 16 kHz (keep public/
-                              pcm16.worklet.js in sync — raw-served, no imports)
   components/
     SessionScreen.jsx         timer + live transcript + MediaRecorder
     StatsPanel.jsx            results: stat blocks, sparkline, fillers, heatmap
     TranscriptHeatmap.jsx     per-word loudness highlight + pause pills
-    PronunciationPanel.jsx    opt-in deep analysis UI
-    CoachPanel.jsx            opt-in Gemini coach UI
-    AISettingsModal.jsx       two keys: Anthropic (topics) + Gemini (coach)
+    AISettingsModal.jsx       Anthropic key (AI topics)
 ```
 
 `finishSession` result pipeline: `analyzeSpeech(transcript)` →
@@ -74,6 +62,16 @@ src/
 - Chrome's recognizer is server-side Google ASR: it needs network, **sends
   audio to Google** (footer wording reflects this), and **strips disfluencies**
   ("um"/"uh") from final transcripts.
+- **Android Chrome delegates recognition to the Google app's speech service** —
+  when that is missing/disabled it hangs SILENTLY (no onerror, no onresult,
+  "listening…" forever). useSpeechRecognition has a 10 s no-result watchdog
+  (`gotResultRef`) that surfaces this as error code `no-results`; onresult
+  clears it. Diagnosed on-device 2026-09-24 with an isolated config matrix:
+  `lang="en-US"` and `interimResults: true` each made the recognizer hear
+  speech yet return zero results; bare config worked ONCE then the API went
+  erratic device-wide (google.com voice search unaffected — it bypasses this
+  API). Conclusion: Chrome Android SpeechRecognition is unreliable on some
+  devices; watchdog + honest error is the app-side ceiling.
 - Filler recovery exists because of that stripping, two paths:
   (A) `diffStrippedFillers(interim, final)` in analyzeSpeech.js — multiset diff
   of the last interim snapshot vs. the finalized text, filtered to known
@@ -89,9 +87,9 @@ src/
   the same `performance.now()` t0 to both `.start(t0)`. alignTranscript depends
   on identical timebases.
 - `alignTranscript` SELF-CALIBRATES the recognition lag: two-pass walk, median
-  implied lag clamped [0.25, 1.75]s, spread > 1.5s → default 0.7. When CTC
-  `wordSpans` exist (deep-analysis pass) the whole lag heuristic is skipped —
-  timings are measured at 20ms resolution.
+  implied lag clamped [0.25, 1.75]s, spread > 1.5s → default 0.7. The optional
+  4th `wordSpans` param (skips the lag heuristic, measured timings) is kept
+  and tested but has NO producer since the pronunciation stack was removed.
 - `voicedMask(samples, floorDb)` takes an optional MEASURED noise floor from
   the SessionScreen mic check (`checkMic` in useAudioAnalysis). The adaptive
   p10 fallback inflates into quiet speech for fluent nonstop talkers — the
@@ -99,16 +97,19 @@ src/
 - `alignTranscript` returns `{ tokens, leftoverCount, leftoverSeconds,
   lagSeconds, lagCalibrated } | null`, NOT a bare array. Pause markers
   subtract skipped-over regions from the gap.
-- Model caching: transformers.js uses the browser Cache API
-  ('transformers-cache') — SECURE CONTEXTS ONLY (localhost/HTTPS). Plain-HTTP
-  LAN origins re-download every visit; panels warn about it. vite.config.js
-  adds immutable headers for /models/ in dev/preview (vercel.json in prod).
 
 **On-device ASR (Moonshine)** — REMOVED (user call, 2026-09-23): the
 onnxruntime-web wasm decoder crashed ("Missing required scale") and value
 overlapped with Gemini live. asr.worker.js/asr.js/asrChunks.js/AsrPanel gone;
-`voicedRegions()` stays (alignTranscript uses it). Non-Chrome browsers
-without a Gemini key get no transcript — accepted trade-off.
+`voicedRegions()` stays (alignTranscript uses it).
+
+**Gemini features** — REMOVED (user call, 2026-09-24): live transcription
+engine (useGeminiLive.js, geminiLive.js, pcm16.worklet.js, resample.js), AI
+coach (aiCoach.js, CoachPanel.jsx, wav.js), and the `speakstage.geminiKey`/
+`speakstage.geminiLive` settings. Chrome SpeechRecognition is now the ONLY
+transcript engine — non-Chrome browsers get no transcript (accepted
+trade-off, same as after the Moonshine removal). Old gemini* localStorage
+keys are orphaned in place; harmless.
 
 **TranscriptHeatmap**
 - Tokens from `.map()` MUST have real whitespace between them
@@ -116,47 +117,22 @@ without a Gemini key get no transcript — accepted trade-off.
   opportunities → the whole row is one unbreakable word → overflows the card.
   Regression-tested in the suite via SSR markup check.
 
-**Deep pronunciation (default-ON; toggle `speakstage.deepAnalysis` is opt-OUT)**
-- Model `Xenova/wav2vec2-base-960h` (q8, ~91 MB) served same-origin from
-  `/models/` — fetched at build time into gitignored `public/models/`, immutable
-  cache headers in `vercel.json`, HF remote fallback stays enabled.
-- transformers.js v4 API: `AutoProcessor` has NO tokenizer attached — load
-  `AutoTokenizer` separately; `get_vocab()` returns a `Map`, not an object.
-- Worker sets `env.localModelPath = "/models/"` and `env.allowLocalModels = true`
-  (defaults to false in browsers).
-- PronunciationPanel auto-runs on mount; `pronunciation.js` dedupes in-flight
-  runs (StrictMode dev double-effect).
-- Moonshine dtype gotcha: int8 ("quantized") decoder crashes onnxruntime-WEB
-  ("Missing required scale" on embed_tokens) though onnxruntime-NODE accepts
-  it. Working combo is `{encoder_model: "q8", decoder_model_merged: "q4"}` —
-  must match fetch-model.mjs's file list. scripts/test-asr-model.mjs proves
-  the local file set loads/runs (node only; cannot catch wasm-only errors).
-- Gemini coach model id lives in `MODEL` in aiCoach.js — retired models 404
-  for new keys; bump when the error says so.
+**Deep pronunciation stack** — REMOVED (user call, 2026-09-24):
+PronunciationPanel, pronunciation.js/.worker.js, forcedAlign.js,
+decodeAudio.js, fetch-model.mjs, test-pronunciation.mjs, vercel.json,
+public/models, the `@huggingface/transformers` dep, and the
+`speakstage.deepAnalysis` toggle all gone. Builds no longer download the
+~91 MB wav2vec2 model. alignTranscript's `wordSpans` param survives (tested,
+no producer).
 
 ## Deployment
 
-Vercel static build. `vercel.json` sets immutable caching for `/models/*`.
-`npm run build` fetches the model at build time, so Vercel builds need network
-access to huggingface.co on first build (cached in build cache afterwards only
-if configured — safe to re-download).
+Vercel static build, default Vite preset (`npm run build` → `dist/`). No
+model downloads, no headers config, no env vars needed.
 
-## AI features (both opt-in, BYO key)
+## AI features (opt-in, BYO key)
 
 - Topics: Anthropic key in `speakstage.apiKey` (Claude API has NO audio input).
-- Gemini key in `speakstage.geminiKey` powers two things:
-  - **Live transcription** (`useGeminiLive.js` + `geminiLive.js` +
-    `public/pcm16.worklet.js`): SessionScreen picks it over Chrome whenever a
-    key exists (`engine` alias). Model `gemini-3.5-transcribe-live`, WS URL
-    `wss://generativelanguage.googleapis.com/ws/...BidiGenerateContent?key=`,
-    audio as `realtimeInput.audio` base64 PCM16 LE `audio/pcm;rate=16000`,
-    transcripts arrive as `serverContent.inputTranscription.text`,
-    `turnComplete` ends a segment. Interim chunks are defensive: replace when
-    cumulative, append when delta.
-  - **Coach** (`aiCoach.js`): reuses `decodeToMono16k` (90 s cap) + `wav.js`
-    (Gemini doesn't accept webm/opus), posts inline base64 WAV to
-    `gemini-3.6-flash` with `responseMimeType: application/json`. Retired
-    models 404 for new keys — bump the `MODEL` const when the error says so.
 
 ## Naming
 
@@ -167,4 +143,5 @@ existing users' streaks, keys, and settings.
 ## Pending / discussed, not approved
 
 - User to verify live transcript + filler recovery in Chrome, then redeploy.
-- `en-IN` language option for recognition (accent fit) — suggested, not built.
+- ~~`en-IN` language option~~ — moot: recognition now uses the device default
+  locale (hardcoded `en-US` was provably harmful on Android, 2026-09-24).

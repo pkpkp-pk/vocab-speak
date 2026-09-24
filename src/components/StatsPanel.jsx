@@ -1,7 +1,4 @@
 import { formatDuration } from "../lib/analyzeSpeech.js";
-import { useLocalStorage } from "../hooks/useLocalStorage.js";
-import PronunciationPanel from "./PronunciationPanel.jsx";
-import CoachPanel from "./CoachPanel.jsx";
 import TranscriptHeatmap from "./TranscriptHeatmap.jsx";
 import "./StatsPanel.css";
 
@@ -43,19 +40,11 @@ function VolumeSpark({ spark, sparkPauses }) {
   );
 }
 
-export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic, geminiKey, onOpenSettings, onWordSpans }) {
+export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic }) {
   const hasTranscript = result.transcript?.trim().length > 0;
   const a = stats.audio;
   // Short voiced regions in the waveform that no transcript words landed on.
   const leftoverCount = stats.annotated?.leftoverCount ?? 0;
-
-  // On-device pronunciation scoring (wav2vec2) — ON by default; the toggle
-  // is the opt-OUT, and the choice persists.
-  const [deepAnalysis, setDeepAnalysis] = useLocalStorage(
-    "speakstage.deepAnalysis",
-    true,
-    (v) => typeof v === "boolean"
-  );
 
   const blocks = [];
   if (hasTranscript) {
@@ -128,46 +117,6 @@ export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic, 
             </ul>
           )}
         </div>
-      )}
-
-      {result.audioBlob && (
-        <>
-          <div className="deep-toggle-row">
-            <button
-              role="switch"
-              aria-checked={deepAnalysis}
-              aria-label="Toggle deep pronunciation analysis"
-              onClick={() => setDeepAnalysis(!deepAnalysis)}
-              className={`deep-toggle ${deepAnalysis ? "on" : ""}`}
-            >
-              <span className="deep-toggle-knob" />
-            </button>
-            <span className="deep-toggle-label">
-              deep pronunciation analysis{" "}
-              <span className="deep-toggle-sub">
-                on by default · runs on-device · ~95 MB first run
-              </span>
-            </span>
-          </div>
-          {deepAnalysis && (
-            <PronunciationPanel
-              audioBlob={result.audioBlob}
-              transcript={result.transcript}
-              onWordSpans={onWordSpans}
-            />
-          )}
-        </>
-      )}
-
-      {result.audioBlob && (
-        <CoachPanel
-          audioBlob={result.audioBlob}
-          topic={topic}
-          transcript={result.transcript}
-          stats={stats}
-          geminiKey={geminiKey}
-          onOpenSettings={onOpenSettings}
-        />
       )}
 
       {hasTranscript &&

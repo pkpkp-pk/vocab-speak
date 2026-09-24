@@ -2,22 +2,19 @@ import { useState } from "react";
 import Modal from "./Modal.jsx";
 import "./AISettingsModal.css";
 
-export default function AISettingsModal({ open, onClose, apiKey, geminiKey, geminiLive, onSave }) {
+export default function AISettingsModal({ open, onClose, apiKey, onSave }) {
   const [draft, setDraft] = useState(apiKey || "");
-  const [geminiDraft, setGeminiDraft] = useState(geminiKey || "");
-  const [liveDraft, setLiveDraft] = useState(geminiLive ?? true);
 
   return (
     <Modal open={open} onClose={onClose}>
       <h3 className="modal-title">AI features</h3>
       <p className="modal-text">
-        Optional bonus modes using your own keys. Keys are stored only in this browser's
-        local storage and sent only to the matching API — never anywhere else.
+        Optional bonus mode using your own key. The key is stored only in this browser's
+        local storage and sent only to api.anthropic.com — never anywhere else.
       </p>
 
       <p className="modal-text ai-key-label">
-        <strong>Anthropic key</strong> — generates fresh topics and keywords on demand
-        (sent to api.anthropic.com).
+        <strong>Anthropic key</strong> — generates fresh topics and keywords on demand.
       </p>
       <input
         type="password"
@@ -27,42 +24,18 @@ export default function AISettingsModal({ open, onClose, apiKey, geminiKey, gemi
         className="input ai-key-input"
       />
 
-      <p className="modal-text ai-key-label">
-        <strong>Gemini key</strong> — powers live transcription during sessions
-        (Gemini 3.5 Transcribe Live; hears "um"/"uh" and works in any browser) and the
-        AI coach on the results screen (sent to generativelanguage.googleapis.com).
-        Get a free key at aistudio.google.com.
-      </p>
-      <input
-        type="password"
-        value={geminiDraft}
-        onChange={(e) => setGeminiDraft(e.target.value)}
-        placeholder="AIza..."
-        className="input ai-key-input"
-      />
-      <label className="ai-live-toggle">
-        <input
-          type="checkbox"
-          checked={liveDraft}
-          onChange={(e) => setLiveDraft(e.target.checked)}
-        />
-        Use Gemini for live transcription during sessions (streams mic audio to
-        Google; off = Chrome's built-in recognizer)
-      </label>
-
       <div className="modal-actions">
         <button
           onClick={() => {
             setDraft("");
-            setGeminiDraft("");
-            onSave({ apiKey: "", geminiKey: "" });
+            onSave({ apiKey: "" });
           }}
           className="modal-clear"
         >
-          Clear both
+          Clear
         </button>
         <button
-          onClick={() => onSave({ apiKey: draft, geminiKey: geminiDraft, geminiLive: liveDraft })}
+          onClick={() => onSave({ apiKey: draft })}
           className="btn-amber"
         >
           Save

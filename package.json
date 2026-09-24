@@ -4,13 +4,11 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "fetch-model": "node scripts/fetch-model.mjs",
-    "dev": "node scripts/fetch-model.mjs && vite",
-    "build": "node scripts/fetch-model.mjs && vite build",
+    "dev": "vite",
+    "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
