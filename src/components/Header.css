@@ -93,35 +93,6 @@
   }
 }
 
-.ai-toggle {
-  border-radius: 999px;
-  border: 1px solid;
-  padding: 0.375rem 0.75rem;
-  font-size: 0.75rem;
-  line-height: 1rem;
-  font-weight: 500;
-  transition: border-color 0.2s, color 0.2s, background-color 0.2s;
-}
-@media (min-width: 640px) {
-  .ai-toggle {
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-  }
-}
-.ai-toggle.on {
-  border-color: var(--coral);
-  background: rgba(255, 93, 115, 0.15);
-  color: var(--coral);
-}
-.ai-toggle.off {
-  border-color: rgba(255, 255, 255, 0.15);
-  color: var(--chalkdim);
-}
-.ai-toggle.off:hover {
-  border-color: rgba(255, 255, 255, 0.3);
-  color: var(--chalk);
-}
-
 .icon-btn {
   display: grid;
   place-items: center;

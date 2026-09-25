@@ -1,6 +1,6 @@
 import "./Header.css";
 
-export default function Header({ aiMode, onToggleAI, onOpenSettings, onOpenCustomTopics, streak }) {
+export default function Header({ onOpenCustomTopics, streak }) {
   return (
     <header className="site-header">
       <div className="logo">
@@ -16,16 +16,8 @@ export default function Header({ aiMode, onToggleAI, onOpenSettings, onOpenCusto
           <div className="streak-badge">🔥 {streak} day streak</div>
         )}
 
-        <button onClick={onToggleAI} className={`ai-toggle ${aiMode ? "on" : "off"}`}>
-          {aiMode ? "AI mode: on" : "AI mode: off"}
-        </button>
-
         <button onClick={onOpenCustomTopics} aria-label="Add your own topics" className="icon-btn">
           +
-        </button>
-
-        <button onClick={onOpenSettings} aria-label="AI settings" className="icon-btn">
-          ⚙
         </button>
       </div>
     </header>

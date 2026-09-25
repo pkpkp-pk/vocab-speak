@@ -4,11 +4,9 @@ import CategoryPicker from "./components/CategoryPicker.jsx";
 import TopicCard from "./components/TopicCard.jsx";
 import SessionScreen from "./components/SessionScreen.jsx";
 import StatsPanel from "./components/StatsPanel.jsx";
-import AISettingsModal from "./components/AISettingsModal.jsx";
 import CustomTopicModal from "./components/CustomTopicModal.jsx";
 import { useLocalStorage } from "./hooks/useLocalStorage.js";
 import { getRandomTopic, TOPICS, DIFFICULTIES } from "./data/topics.js";
-import { generateAITopic } from "./lib/aiTopics.js";
 import { analyzeSpeech } from "./lib/analyzeSpeech.js";
 import { analyzeVocabulary } from "./lib/analyzeVocabulary.js";
 import { analyzeAudio } from "./lib/analyzeAudio.js";
@@ -47,10 +45,7 @@ export default function App() {
   const [topic, setTopic] = useState(() => getRandomTopic(TOPICS, {}));
   const [sessionResult, setSessionResult] = useState(null);
 
-  const [aiMode, setAiMode] = useLocalStorage("speakstage.aiMode", false, (v) => typeof v === "boolean");
-  const [apiKey, setApiKey] = useLocalStorage("speakstage.apiKey", "", (v) => typeof v === "string");
   const [customTopics, setCustomTopics] = useLocalStorage("speakstage.customTopics", [], Array.isArray);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [customModalOpen, setCustomModalOpen] = useState(false);
   const [lastPracticeDate, setLastPracticeDate] = useLocalStorage(
     "speakstage.lastDate",
@@ -59,8 +54,6 @@ export default function App() {
   );
   const [streak, setStreak] = useLocalStorage("speakstage.streak", 0, (v) => typeof v === "number" && v >= 0);
 
-  const [loadingAI, setLoadingAI] = useState(false);
-  const [aiError, setAiError] = useState(null);
   const [spinning, setSpinning] = useState(false);
   const [spinDisplay, setSpinDisplay] = useState(topic);
   const [justLanded, setJustLanded] = useState(false);
@@ -94,7 +87,6 @@ export default function App() {
     const pool = combinedPool;
     const runId = ++spinRunIdRef.current;
 
-    setAiError(null);
     setSpinning(true);
     setJustLanded(false);
 
@@ -107,20 +99,7 @@ export default function App() {
     };
     fastTick();
 
-    let finalTopic;
-    if (aiMode && apiKey) {
-      setLoadingAI(true);
-      try {
-        finalTopic = await generateAITopic({ apiKey, category: nextCategory, difficulty: nextDifficulty });
-      } catch (err) {
-        setAiError(err.message);
-        finalTopic = getRandomTopic(pool, { category: nextCategory, difficulty: nextDifficulty, excludeId: topic?.id });
-      } finally {
-        setLoadingAI(false);
-      }
-    } else {
-      finalTopic = getRandomTopic(pool, { category: nextCategory, difficulty: nextDifficulty, excludeId: topic?.id });
-    }
+    const finalTopic = getRandomTopic(pool, { category: nextCategory, difficulty: nextDifficulty, excludeId: topic?.id });
 
     if (spinRunIdRef.current !== runId) return; // a newer spin superseded this one
 
@@ -202,12 +181,6 @@ export default function App() {
   return (
     <div className="app-shell">
       <Header
-        aiMode={aiMode}
-        onToggleAI={() => {
-          if (!aiMode && !apiKey) setSettingsOpen(true);
-          setAiMode(!aiMode);
-        }}
-        onOpenSettings={() => setSettingsOpen(true)}
         onOpenCustomTopics={() => setCustomModalOpen(true)}
         streak={streak}
       />
@@ -228,10 +201,6 @@ export default function App() {
               onCategory={handleCategory}
               onDifficulty={handleDifficulty}
             />
-
-            {aiError && (
-              <p className="ai-error">{aiError} — landed on a local topic instead.</p>
-            )}
 
             <TopicCard
               topic={topic}
@@ -275,17 +244,6 @@ export default function App() {
         )}
       </div>
 
-      <AISettingsModal
-        open={settingsOpen}
-        apiKey={apiKey}
-        onClose={() => setSettingsOpen(false)}
-        onSave={({ apiKey: newKey }) => {
-          setApiKey(newKey);
-          if (!newKey) setAiMode(false);
-          setSettingsOpen(false);
-        }}
-      />
-
       <CustomTopicModal
         open={customModalOpen}
         onClose={() => setCustomModalOpen(false)}
@@ -296,7 +254,7 @@ export default function App() {
 
       <footer className="app-footer">
         Built for daily fluency practice — waveform analysis stays in your browser;
-        live transcription and AI features send audio/text to their respective APIs.
+        live transcription uses Chrome's speech service.
       </footer>
     </div>
   );

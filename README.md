@@ -58,11 +58,6 @@ output `dist`). No extra configuration is needed.
   `src/lib/pitch.js`), so they work in any modern browser — no transcript
   needed. Auto-gain is disabled at capture time on purpose, so the volume
   stats reflect you, not your OS's gain riding.
-- **AI bonus mode** (optional) — toggle "AI mode" in the header and paste
-  your own Anthropic API key (gear icon) to generate fresh topics and
-  keyword sets on demand instead of pulling from the local list. The key
-  is stored only in `localStorage` and sent only to `api.anthropic.com`.
-  Leave this off and the app works fully offline.
 
 ## Project structure
 
@@ -75,10 +70,9 @@ src/
   lib/analyzeSpeech.js     WPM / filler-word / keyword-usage stats
   lib/analyzeAudio.js      pause / volume / pitch-variety stats
   lib/pitch.js             YIN-lite pitch detector
-  lib/aiTopics.js          optional AI topic generation
   components/              Header, CategoryPicker, TopicCard, TimerRing,
                             KeywordHelper, SessionScreen, StatsPanel,
-                            AISettingsModal
+                            CustomTopicModal
   App.jsx                  select -> session -> results state machine
 ```
 

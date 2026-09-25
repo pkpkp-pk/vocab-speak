@@ -39,12 +39,11 @@ src/
     analyzeAudio.js           pauses/volume/pitch; voicedMask(), voicedRegions()
     pitch.js                  YIN-lite F0 detection
     alignTranscript.js        transcript↔waveform alignment (see gotchas)
-    aiTopics.js               optional BYO-key AI topic generation (Anthropic)
   components/
     SessionScreen.jsx         timer + live transcript + MediaRecorder
     StatsPanel.jsx            results: stat blocks, sparkline, fillers, heatmap
     TranscriptHeatmap.jsx     per-word loudness highlight + pause pills
-    AISettingsModal.jsx       Anthropic key (AI topics)
+    CustomTopicModal.jsx      user-added topics (localStorage)
 ```
 
 `finishSession` result pipeline: `analyzeSpeech(transcript)` →
@@ -130,15 +129,21 @@ no producer).
 Vercel static build, default Vite preset (`npm run build` → `dist/`). No
 model downloads, no headers config, no env vars needed.
 
-## AI features (opt-in, BYO key)
+## AI features — ALL REMOVED
 
-- Topics: Anthropic key in `speakstage.apiKey` (Claude API has NO audio input).
+AI topics (Anthropic BYO key) removed 2026-09-25 (user call): Header AI-mode
+toggle + settings gear, AISettingsModal, aiTopics.js, `speakstage.aiMode`/
+`speakstage.apiKey` state. App is now fully offline except Chrome's speech
+recognition (which sends audio to Google — see footer). Earlier removals:
+Gemini live + coach (2026-09-24), pronunciation stack (2026-09-24). Orphaned
+localStorage keys (`geminiKey`, `geminiLive`, `deepAnalysis`, `aiMode`,
+`apiKey`) stay harmlessly in existing users' browsers.
 
 ## Naming
 
 App renamed to **Vocab Speak** (header, title, README, package.json).
 `speakstage.*` localStorage keys intentionally kept — renaming them would wipe
-existing users' streaks, keys, and settings.
+existing users' streaks and settings.
 
 ## Pending / discussed, not approved
 
