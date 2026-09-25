@@ -1,4 +1,5 @@
 import { formatDuration } from "../lib/analyzeSpeech.js";
+import PronunciationPanel from "./PronunciationPanel.jsx";
 import TranscriptHeatmap from "./TranscriptHeatmap.jsx";
 import "./StatsPanel.css";
 
@@ -40,7 +41,7 @@ function VolumeSpark({ spark, sparkPauses }) {
   );
 }
 
-export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic }) {
+export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic, onWordSpans }) {
   const hasTranscript = result.transcript?.trim().length > 0;
   const a = stats.audio;
   // Short voiced regions in the waveform that no transcript words landed on.
@@ -117,6 +118,14 @@ export default function StatsPanel({ topic, result, stats, onRetry, onNewTopic }
             </ul>
           )}
         </div>
+      )}
+
+      {result.audioBlob && (
+        <PronunciationPanel
+          audioBlob={result.audioBlob}
+          transcript={result.transcript}
+          onWordSpans={onWordSpans}
+        />
       )}
 
       {hasTranscript &&

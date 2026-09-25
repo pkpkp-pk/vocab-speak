@@ -10,6 +10,13 @@ const SpeechRecognitionAPI =
     : null;
 
 export function useSpeechRecognition() {
+  // Brave ships Chromium's SpeechRecognition object but WITHOUT Google's
+  // server-ASR keys — start() always errors "network". Detect it up front so
+  // the UI shows the "unsupported browser" note instead of a bogus error.
+  const [isBrave, setIsBrave] = useState(false);
+  useEffect(() => {
+    navigator.brave?.isBrave?.().then((b) => b && setIsBrave(true)).catch(() => {});
+  }, []);
   const [supported] = useState(!!SpeechRecognitionAPI);
   const [listening, setListening] = useState(false);
   const [finalTranscript, setFinalTranscript] = useState("");
@@ -168,7 +175,7 @@ export function useSpeechRecognition() {
   const getStrippedFillers = useCallback(() => strippedFillersRef.current, []);
 
   return {
-    supported,
+    supported: supported && !isBrave,
     listening,
     finalTranscript,
     interimTranscript,

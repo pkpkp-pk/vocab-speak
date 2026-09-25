@@ -11,6 +11,7 @@ import { analyzeSpeech } from "./lib/analyzeSpeech.js";
 import { analyzeVocabulary } from "./lib/analyzeVocabulary.js";
 import { analyzeAudio } from "./lib/analyzeAudio.js";
 import { alignTranscript } from "./lib/alignTranscript.js";
+import { prewarmPronunciation } from "./lib/pronunciation.js";
 import "./App.css";
 
 // Local-calendar date as YYYY-MM-DD. (The old version used toISOString(),
@@ -62,6 +63,12 @@ export default function App() {
   const spinRunIdRef = useRef(0);
 
   useEffect(() => () => clearTimeout(spinTimeoutRef.current), []);
+
+  // Start the pronunciation model's download/load when a session begins, so
+  // the on-device analysis at session end doesn't wait on a cold ~95 MB fetch.
+  useEffect(() => {
+    if (stage === "session") prewarmPronunciation();
+  }, [stage]);
 
   // Delayed stage swap (replaces framer-motion's <AnimatePresence mode="wait">):
   // fade the old stage out, swap content after the fade, new stage fades in.
@@ -141,6 +148,22 @@ export default function App() {
   const handleDifficulty = (id) => {
     setDifficulty(id);
     pickTopic({ difficulty: id });
+  };
+
+  // When pronunciation analysis produces CTC word spans, upgrade the heatmap
+  // from estimated to measured per-word timings.
+  const applyWordSpans = (words) => {
+    setSessionResult((prev) => {
+      if (!prev) return prev;
+      const stats = { ...prev.stats };
+      stats.annotated = alignTranscript(
+        prev.result.speechSegments,
+        prev.result.audioSamples,
+        prev.result.micFloorDb,
+        words
+      );
+      return { ...prev, stats };
+    });
   };
 
   const addCustomTopic = (t) => setCustomTopics((prev) => [...prev, t]);
@@ -240,6 +263,7 @@ export default function App() {
               pickTopic();
               setStage("select");
             }}
+            onWordSpans={applyWordSpans}
           />
         )}
       </div>

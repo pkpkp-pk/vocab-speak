@@ -39,9 +39,14 @@ src/
     analyzeAudio.js           pauses/volume/pitch; voicedMask(), voicedRegions()
     pitch.js                  YIN-lite F0 detection
     alignTranscript.js        transcript↔waveform alignment (see gotchas)
+    decodeAudio.js            MediaRecorder blob → 16 kHz mono PCM (90s cap)
+    forcedAlign.js            CTC forced alignment + greedy decode (pure)
+    pronunciation.js          worker wrapper (+ prewarmPronunciation)
+    pronunciation.worker.js   wav2vec2-base-960h q8 on-device scoring
   components/
     SessionScreen.jsx         timer + live transcript + MediaRecorder
     StatsPanel.jsx            results: stat blocks, sparkline, fillers, heatmap
+    PronunciationPanel.jsx    per-word pronunciation chips (auto-run, silent)
     TranscriptHeatmap.jsx     per-word loudness highlight + pause pills
     CustomTopicModal.jsx      user-added topics (localStorage)
 ```
@@ -61,6 +66,10 @@ src/
 - Chrome's recognizer is server-side Google ASR: it needs network, **sends
   audio to Google** (footer wording reflects this), and **strips disfluencies**
   ("um"/"uh") from final transcripts.
+- **Brave has NO working SpeechRecognition** — ships the API object but strips
+  Google's server-ASR keys, so start() always errors `network` (shields state
+  irrelevant). Hook detects via `navigator.brave.isBrave()` and reports
+  `supported: false` → UI shows the unsupported-browser note. 2026-09-25.
 - **Android Chrome delegates recognition to the Google app's speech service** —
   when that is missing/disabled it hangs SILENTLY (no onerror, no onresult,
   "listening…" forever). useSpeechRecognition has a 10 s no-result watchdog
@@ -87,8 +96,8 @@ src/
   on identical timebases.
 - `alignTranscript` SELF-CALIBRATES the recognition lag: two-pass walk, median
   implied lag clamped [0.25, 1.75]s, spread > 1.5s → default 0.7. The optional
-  4th `wordSpans` param (skips the lag heuristic, measured timings) is kept
-  and tested but has NO producer since the pronunciation stack was removed.
+  4th `wordSpans` param (skips the lag heuristic, measured timings) is fed by
+  the pronunciation stack when its analysis completes (see below).
 - `voicedMask(samples, floorDb)` takes an optional MEASURED noise floor from
   the SessionScreen mic check (`checkMic` in useAudioAnalysis). The adaptive
   p10 fallback inflates into quiet speech for fluent nonstop talkers — the
@@ -116,18 +125,28 @@ keys are orphaned in place; harmless.
   opportunities → the whole row is one unbreakable word → overflows the card.
   Regression-tested in the suite via SSR markup check.
 
-**Deep pronunciation stack** — REMOVED (user call, 2026-09-24):
+**Deep pronunciation stack** — RESTORED, slimmed (user call, 2026-09-25):
 PronunciationPanel, pronunciation.js/.worker.js, forcedAlign.js,
-decodeAudio.js, fetch-model.mjs, test-pronunciation.mjs, vercel.json,
-public/models, the `@huggingface/transformers` dep, and the
-`speakstage.deepAnalysis` toggle all gone. Builds no longer download the
-~91 MB wav2vec2 model. alignTranscript's `wordSpans` param survives (tested,
-no producer).
+decodeAudio.js, and the `@huggingface/transformers` dep are back (wav2vec2
+CTC forced alignment, ~95 MB q8 model). Differences from the old stack:
+- Auto-run always: App prewarms the worker when a session starts (model
+  downloads during speaking), PronunciationPanel runs on mount and renders
+  NOTHING until scores exist — no toggle, no progress bar, no download UI.
+  Failure degrades to a one-line note + retry.
+- No fetch-model.mjs / public/models / vercel.json: the worker pulls the
+  model from the Hugging Face hub at runtime; the browser's Cache API makes
+  it a once-per-browser download. (Requires a secure context — localhost or
+  HTTPS — to persist; plain-HTTP LAN origins re-download every visit.)
+- `speakstage.deepAnalysis` toggle NOT restored (orphaned key stays unused).
+alignTranscript's `wordSpans` param has a producer again: PronunciationPanel
+passes measured spans up via `onWordSpans` → App.applyWordSpans, upgrading
+the heatmap in place.
 
 ## Deployment
 
 Vercel static build, default Vite preset (`npm run build` → `dist/`). No
-model downloads, no headers config, no env vars needed.
+build-time downloads, no headers config, no env vars needed. The wav2vec2
+model downloads at RUNTIME from the Hugging Face hub (browser-cached).
 
 ## AI features — ALL REMOVED
 
@@ -135,9 +154,10 @@ AI topics (Anthropic BYO key) removed 2026-09-25 (user call): Header AI-mode
 toggle + settings gear, AISettingsModal, aiTopics.js, `speakstage.aiMode`/
 `speakstage.apiKey` state. App is now fully offline except Chrome's speech
 recognition (which sends audio to Google — see footer). Earlier removals:
-Gemini live + coach (2026-09-24), pronunciation stack (2026-09-24). Orphaned
-localStorage keys (`geminiKey`, `geminiLive`, `deepAnalysis`, `aiMode`,
-`apiKey`) stay harmlessly in existing users' browsers.
+Gemini live + coach (2026-09-24). The pronunciation stack was removed
+2026-09-24 and RESTORED in slimmed auto-run form 2026-09-25 — see above.
+Orphaned localStorage keys (`geminiKey`, `geminiLive`, `deepAnalysis`,
+`aiMode`, `apiKey`) stay harmlessly in existing users' browsers.
 
 ## Naming
 
